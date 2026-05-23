@@ -342,9 +342,7 @@ function HomeScreen({ connection, isSyncing, lastSync, lists, notes, pendingCoun
                 <strong>{notes.filter((note) => !note.deleted && note.listId === list.id).length}</strong>
                 <span className="chevron">›</span>
               </button>
-              {list.id !== "default-growth" ? (
-                <button className="row-delete" type="button" aria-label={`Удалить ${list.title}`} onClick={() => onDeleteList(list)}>×</button>
-              ) : null}
+              <button className="row-delete" type="button" aria-label={`Удалить ${list.title}`} onClick={() => onDeleteList(list)}>×</button>
             </div>
           ))}
         </div>
