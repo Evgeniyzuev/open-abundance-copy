@@ -24,7 +24,19 @@ body {
 button, input, textarea, select { font: inherit; }
 button { border: 0; cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: 0.45; }
-.app-shell { min-height: 100vh; padding: 20px; }
+.app-shell { min-height: 100vh; padding: 0 20px; }
+.app-content { min-height: 100vh; padding: 84px 0 98px; }
+.glass-tabbar { position: fixed; left: 50%; z-index: 10; width: min(calc(100% - 28px), 560px); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.58); background: rgba(255,255,255,0.66); box-shadow: 0 12px 34px rgba(25, 25, 35, 0.13); backdrop-filter: blur(20px) saturate(1.35); transform: translateX(-50%); transition: transform 180ms ease, opacity 180ms ease; }
+.top-tabbar { top: max(12px, env(safe-area-inset-top)); min-height: 48px; padding: 4px 10px; border-radius: 0 0 18px 18px; }
+.bottom-tabbar { bottom: max(12px, env(safe-area-inset-bottom)); min-height: 54px; padding: 5px 10px; border-radius: 20px; }
+.top-tabbar.nav-hidden { transform: translate(-50%, calc(-100% - 18px)); opacity: 0.02; pointer-events: none; }
+.bottom-tabbar.nav-hidden { transform: translate(-50%, calc(100% + 18px)); opacity: 0.02; pointer-events: none; }
+.tab-button { min-width: 0; height: 40px; border-radius: 14px; background: transparent; color: #8f98a1; font-size: 28px; line-height: 1; }
+.tab-button span { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; }
+.tab-button.active { color: var(--blue); background: rgba(10, 132, 255, 0.1); }
+.tabbar-title { overflow: hidden; color: var(--text); font-size: 17px; font-weight: 800; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.placeholder-screen { max-width: 610px; min-height: calc(100vh - 182px); margin: 0 auto; display: grid; place-items: center; }
+.placeholder-screen h1 { margin: 0; color: var(--text); font-size: 30px; }
 .reminders-app { position: relative; max-width: 610px; min-height: calc(100vh - 40px); margin: 0 auto; padding-bottom: 88px; }
 .home-topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 52px; }
 .status-line { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; }
@@ -102,7 +114,8 @@ h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.05; letter-spacing: 0; }
 .info-block span { color: var(--muted); }
 .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 @media (max-width: 620px) {
-  .app-shell { padding: 22px 14px 14px; }
+  .app-shell { padding: 0 14px; }
+  .app-content { padding-top: 78px; padding-bottom: 92px; }
   .reminders-app { min-height: calc(100vh - 36px); }
   .smart-grid.compact { gap: 10px; }
   .smart-card { min-height: 106px; padding: 13px 15px; }
