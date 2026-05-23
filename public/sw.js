@@ -16,11 +16,18 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).then((response) => {
-      const copy = response.clone();
-      caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
-      return response;
-    }).catch(() => caches.match("/")));
+    event.respondWith(
+      caches.match("/").then((cached) => {
+        // Всегда возвращаем кэш немедленно (stale-while-revalidate)
+        const fetchPromise = fetch(request).then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
+          return response;
+        }).catch(() => cached);
+        // Если есть кэш — отдаём сразу, иначе ждём fetch
+        return cached || fetchPromise;
+      })
+    );
     return;
   }
 
