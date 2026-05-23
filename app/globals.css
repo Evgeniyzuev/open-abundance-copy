@@ -26,11 +26,11 @@ button { border: 0; cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: 0.45; }
 .app-shell { min-height: 100vh; padding: 0 20px; }
 .app-content { min-height: 100vh; padding: 84px 0 98px; }
-.glass-tabbar { position: fixed; left: 50%; z-index: 10; width: min(calc(100% - 28px), 560px); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.58); background: rgba(255,255,255,0.66); box-shadow: 0 12px 34px rgba(25, 25, 35, 0.13); backdrop-filter: blur(20px) saturate(1.35); transform: translateX(-50%); transition: transform 180ms ease, opacity 180ms ease; }
-.top-tabbar { top: max(12px, env(safe-area-inset-top)); min-height: 48px; padding: 4px 10px; border-radius: 0 0 18px 18px; }
-.bottom-tabbar { bottom: max(12px, env(safe-area-inset-bottom)); min-height: 54px; padding: 5px 10px; border-radius: 20px; }
-.top-tabbar.nav-hidden { transform: translate(-50%, calc(-100% - 18px)); opacity: 0.02; pointer-events: none; }
-.bottom-tabbar.nav-hidden { transform: translate(-50%, calc(100% + 18px)); opacity: 0.02; pointer-events: none; }
+.glass-tabbar { position: fixed; left: 0; right: 0; z-index: 10; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; align-items: center; gap: 4px; background: rgba(255,255,255,0.48); box-shadow: 0 8px 28px rgba(25, 25, 35, 0.08); backdrop-filter: blur(20px) saturate(1.35); transform: translateY(0); transition: transform 180ms ease, opacity 180ms ease; }
+.top-tabbar { top: 0; min-height: calc(48px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 10px 0; border-bottom: 1px solid rgba(229,229,234,0.54); }
+.bottom-tabbar { bottom: 0; min-height: calc(54px + env(safe-area-inset-bottom)); padding: 0 10px env(safe-area-inset-bottom); border-top: 1px solid rgba(229,229,234,0.54); }
+.top-tabbar.nav-hidden { transform: translateY(-100%); opacity: 0.02; pointer-events: none; }
+.bottom-tabbar.nav-hidden { transform: translateY(100%); opacity: 0.02; pointer-events: none; }
 .tab-button { min-width: 0; height: 40px; border-radius: 14px; background: transparent; color: #8f98a1; font-size: 28px; line-height: 1; }
 .tab-button span { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; }
 .tab-button.active { color: var(--blue); background: rgba(10, 132, 255, 0.1); }
