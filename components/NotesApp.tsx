@@ -16,6 +16,7 @@ import {
 
 type ConnectionState = "online" | "offline";
 type ViewId = "today" | "planned" | "all" | "completed" | `list:${string}`;
+type ModalMode = "create" | "edit";
 
 type SmartList = {
   id: ViewId;
@@ -25,14 +26,13 @@ type SmartList = {
 };
 
 const smartLists: SmartList[] = [
-  { id: "today", title: "Сегодня", icon: "●", tone: "blue" },
-  { id: "planned", title: "В планах", icon: "◆", tone: "amber" },
-  { id: "all", title: "Все", icon: "◎", tone: "slate" },
-  { id: "completed", title: "Завершено", icon: "✓", tone: "green" }
+  { id: "today", title: "Сегодня", icon: "23", tone: "blue" },
+  { id: "planned", title: "В планах", icon: "□", tone: "red" },
+  { id: "all", title: "Все", icon: "▱", tone: "black" },
+  { id: "completed", title: "Завершено", icon: "✓", tone: "gray" }
 ];
 
-const listIcons = ["↗", "☆", "$", "◌", "□", "◇", "+", "#"];
-const listColors = ["#0f8f72", "#2f80ed", "#a66a00", "#8a5cf6", "#db4c77", "#506070"];
+const listColors = ["#ff9500", "#007aff", "#34c759", "#ff3b30", "#af52de", "#8e8e93"];
 
 const emptyNoteForm = {
   title: "",
@@ -44,8 +44,8 @@ const emptyNoteForm = {
 
 const emptyListForm = {
   title: "",
-  icon: "↗",
-  color: "#0f8f72"
+  icon: "↗️",
+  color: "#007aff"
 };
 
 export default function NotesApp() {
@@ -54,10 +54,17 @@ export default function NotesApp() {
   const [noteForm, setNoteForm] = useState(emptyNoteForm);
   const [listForm, setListForm] = useState(emptyListForm);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<ViewId>("today");
+  const [detailView, setDetailView] = useState<ViewId | null>(null);
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [listModalOpen, setListModalOpen] = useState(false);
+  const [infoNoteId, setInfoNoteId] = useState<string | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("online");
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
+
+  const activeView = detailView ?? "all";
+  const activeTitle = getViewTitle(activeView, lists);
+  const activeNote = infoNoteId ? notes.find((note) => note.id === infoNoteId) : undefined;
 
   const visibleNotes = useMemo(() => {
     const source = notes.filter((note) => !note.deleted);
@@ -68,7 +75,6 @@ export default function NotesApp() {
   }, [activeView, notes]);
 
   const pendingCount = [...notes, ...lists].filter((item) => item.syncStatus !== "synced").length;
-  const activeTitle = getViewTitle(activeView, lists);
 
   async function refreshData() {
     const [storedNotes, storedLists] = await Promise.all([getNotes(), getLists()]);
@@ -110,6 +116,39 @@ export default function NotesApp() {
     };
   }, []);
 
+  function openList(view: ViewId) {
+    setDetailView(view);
+    if (view.startsWith("list:")) {
+      setNoteForm((current) => ({ ...current, listId: view.slice(5) }));
+    }
+  }
+
+  function openCreateNote() {
+    const listId = detailView?.startsWith("list:") ? detailView.slice(5) : lists[0]?.id ?? "default-growth";
+    setEditingId(null);
+    setNoteForm({ ...emptyNoteForm, listId });
+    setNoteModalOpen(true);
+  }
+
+  function openEditNote(note: Note) {
+    setEditingId(note.id);
+    setNoteForm({
+      title: note.title,
+      body: note.body,
+      listId: note.listId || lists[0]?.id || "default-growth",
+      reminderDraft: "",
+      reminders: note.reminders || []
+    });
+    setInfoNoteId(null);
+    setNoteModalOpen(true);
+  }
+
+  function closeNoteModal() {
+    setNoteModalOpen(false);
+    setEditingId(null);
+    setNoteForm(emptyNoteForm);
+  }
+
   async function handleNoteSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const title = noteForm.title.trim();
@@ -125,8 +164,7 @@ export default function NotesApp() {
       syncStatus: navigator.onLine ? "pending_sync" : "local"
     });
 
-    setNoteForm({ ...emptyNoteForm, listId: noteForm.listId });
-    setEditingId(null);
+    closeNoteModal();
     await refreshData();
     if (navigator.onLine) await syncNow();
   }
@@ -140,14 +178,14 @@ export default function NotesApp() {
     await saveList({
       id,
       title,
-      icon: listForm.icon,
+      icon: listForm.icon.trim() || "•",
       color: listForm.color,
       syncStatus: navigator.onLine ? "pending_sync" : "local"
     });
 
     setListForm(emptyListForm);
-    setActiveView(`list:${id}`);
-    setNoteForm((current) => ({ ...current, listId: id }));
+    setListModalOpen(false);
+    setDetailView(`list:${id}`);
     await refreshData();
     if (navigator.onLine) await syncNow();
   }
@@ -168,19 +206,9 @@ export default function NotesApp() {
     }));
   }
 
-  function startEdit(note: Note) {
-    setEditingId(note.id);
-    setNoteForm({
-      title: note.title,
-      body: note.body,
-      listId: note.listId || lists[0]?.id || "default-growth",
-      reminderDraft: "",
-      reminders: note.reminders || []
-    });
-  }
-
   async function removeNote(note: Note) {
     await deleteNote(note.id);
+    setInfoNoteId(null);
     await refreshData();
     if (navigator.onLine) await syncNow();
   }
@@ -193,146 +221,292 @@ export default function NotesApp() {
 
   async function removeList(list: ReminderList) {
     await deleteList(list.id);
-    setActiveView("all");
+    setDetailView(null);
     await refreshData();
     if (navigator.onLine) await syncNow();
   }
 
   return (
     <section className="reminders-app">
-      <header className="topbar compact">
-        <div>
-          <p className="eyebrow">Offline Reminders Pilot</p>
-          <h1>Напоминания роста</h1>
-          <p className="lead">Списки, задачи, несколько дат и офлайн-синхронизация. Работает даже без связи после первого открытия.</p>
+      {detailView ? (
+        <ListDetail
+          activeTitle={activeTitle}
+          notes={visibleNotes}
+          lists={lists}
+          onBack={() => setDetailView(null)}
+          onCreate={openCreateNote}
+          onComplete={completeNote}
+          onEdit={openEditNote}
+          onInfo={setInfoNoteId}
+        />
+      ) : (
+        <HomeScreen
+          connection={connection}
+          isSyncing={isSyncing}
+          lastSync={lastSync}
+          lists={lists}
+          notes={notes}
+          pendingCount={pendingCount}
+          onCreateList={() => setListModalOpen(true)}
+          onCreateNote={openCreateNote}
+          onDeleteList={removeList}
+          onOpenList={openList}
+          onSync={syncNow}
+        />
+      )}
+
+      {noteModalOpen ? (
+        <NoteModal
+          mode={editingId ? "edit" : "create"}
+          form={noteForm}
+          lists={lists}
+          onAddReminder={addReminder}
+          onClose={closeNoteModal}
+          onRemoveReminder={removeReminder}
+          onSubmit={handleNoteSubmit}
+          setForm={setNoteForm}
+        />
+      ) : null}
+
+      {listModalOpen ? (
+        <ListModal
+          form={listForm}
+          onClose={() => setListModalOpen(false)}
+          onSubmit={handleListSubmit}
+          setForm={setListForm}
+        />
+      ) : null}
+
+      {activeNote ? (
+        <InfoModal
+          list={lists.find((item) => item.id === activeNote.listId)}
+          note={activeNote}
+          onClose={() => setInfoNoteId(null)}
+          onDelete={() => removeNote(activeNote)}
+          onEdit={() => openEditNote(activeNote)}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+type HomeScreenProps = {
+  connection: ConnectionState;
+  isSyncing: boolean;
+  lastSync: string | null;
+  lists: ReminderList[];
+  notes: Note[];
+  pendingCount: number;
+  onCreateList: () => void;
+  onCreateNote: () => void;
+  onDeleteList: (list: ReminderList) => void;
+  onOpenList: (view: ViewId) => void;
+  onSync: () => void;
+};
+
+function HomeScreen({ connection, isSyncing, lastSync, lists, notes, pendingCount, onCreateList, onCreateNote, onDeleteList, onOpenList, onSync }: HomeScreenProps) {
+  return (
+    <>
+      <header className="home-topbar">
+        <div className="status-line">
+          <span className={`dot ${connection}`} />
+          <span>{connection}</span>
+          <span>{pendingCount} sync</span>
+          <span>{lastSync ?? "еще нет"}</span>
         </div>
-        <button className="secondary-button" type="button" disabled={connection === "offline" || isSyncing || pendingCount === 0} onClick={syncNow}>
-          {isSyncing ? "Синхронизация..." : "Синхронизировать"}
-        </button>
+        <div className="top-actions">
+          <button className="round-button" type="button" aria-label="Синхронизировать" disabled={connection === "offline" || isSyncing || pendingCount === 0} onClick={onSync}>↻</button>
+          <button className="round-button" type="button" aria-label="Создать список" onClick={onCreateList}>▦+</button>
+          <button className="round-button" type="button" aria-label="Еще">•••</button>
+        </div>
       </header>
 
-      <div className="status-strip" aria-label="Статус приложения">
-        <span className={`status-pill status-${connection}`}>{connection}</span>
-        <span>{notes.filter((note) => !note.deleted).length} задач</span>
-        <span>{pendingCount} ожидают sync</span>
-        <span>sync: {lastSync ?? "еще нет"}</span>
+      <div className="smart-grid compact">
+        {smartLists.map((list) => (
+          <button key={list.id} className={`smart-card ${list.tone}`} type="button" onClick={() => onOpenList(list.id)}>
+            <span className="smart-icon">{list.icon}</span>
+            <strong>{getSmartCount(list.id, notes)}</strong>
+            <span>{list.title}</span>
+          </button>
+        ))}
       </div>
 
-      <div className="reminders-layout">
-        <aside className="sidebar" aria-label="Списки">
-          <div className="smart-grid">
-            {smartLists.map((list) => (
-              <button key={list.id} className={`smart-card ${activeView === list.id ? "active" : ""}`} type="button" onClick={() => setActiveView(list.id)}>
-                <span className={`smart-icon ${list.tone}`}>{list.icon}</span>
-                <span className="smart-title">{list.title}</span>
-                <strong>{getSmartCount(list.id, notes)}</strong>
+      <section className="my-lists-section">
+        <h1>Мои списки</h1>
+        <div className="ios-list-card">
+          {lists.map((list) => (
+            <div className="ios-list-row" key={list.id}>
+              <button type="button" onClick={() => onOpenList(`list:${list.id}`)}>
+                <span className="list-icon" style={{ backgroundColor: list.color }}>{list.icon}</span>
+                <span>{list.title}</span>
+                <strong>{notes.filter((note) => !note.deleted && note.listId === list.id).length}</strong>
+                <span className="chevron">›</span>
               </button>
-            ))}
-          </div>
+              {list.id !== "default-growth" ? (
+                <button className="row-delete" type="button" aria-label={`Удалить ${list.title}`} onClick={() => onDeleteList(list)}>×</button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </section>
 
-          <div className="list-section-title">Мои списки</div>
-          <div className="custom-lists">
-            {lists.map((list) => (
-              <div className={`list-row ${activeView === `list:${list.id}` ? "active" : ""}`} key={list.id}>
-                <button type="button" onClick={() => { setActiveView(`list:${list.id}`); setNoteForm((current) => ({ ...current, listId: list.id })); }}>
-                  <span className="list-icon" style={{ backgroundColor: list.color }}>{list.icon}</span>
-                  <span>{list.title}</span>
-                  <strong>{notes.filter((note) => !note.deleted && note.listId === list.id).length}</strong>
+      <button className="floating-add" type="button" aria-label="Создать заметку" onClick={onCreateNote}>+</button>
+    </>
+  );
+}
+
+type ListDetailProps = {
+  activeTitle: string;
+  notes: Note[];
+  lists: ReminderList[];
+  onBack: () => void;
+  onCreate: () => void;
+  onComplete: (note: Note) => void;
+  onEdit: (note: Note) => void;
+  onInfo: (id: string) => void;
+};
+
+function ListDetail({ activeTitle, notes, lists, onBack, onCreate, onComplete, onEdit, onInfo }: ListDetailProps) {
+  return (
+    <section className="detail-screen">
+      <header className="detail-topbar">
+        <button className="back-button" type="button" onClick={onBack}>‹</button>
+        <h1>{activeTitle}</h1>
+        <div className="detail-actions">
+          <button className="round-button" type="button" aria-label="Поделиться">⇧</button>
+          <button className="round-button" type="button" aria-label="Еще">•••</button>
+        </div>
+      </header>
+
+      <div className="task-list compact-list">
+        {notes.length === 0 ? (
+          <div className="empty-state">В этом списке пока пусто.</div>
+        ) : (
+          notes.map((note) => {
+            const list = lists.find((item) => item.id === note.listId);
+            return (
+              <article className={`task-row ${note.completed ? "completed" : ""}`} key={note.id}>
+                <button className="complete-toggle" type="button" aria-label="Завершить" onClick={() => onComplete(note)}>{note.completed ? "✓" : ""}</button>
+                <button className="task-text" type="button" onClick={() => onEdit(note)}>
+                  <span>{note.title}</span>
+                  {note.body ? <small>{note.body}</small> : null}
+                  {note.reminders.length > 0 ? <em>{note.reminders.map(formatReminder).join(" · ")}</em> : null}
+                  {list ? <i>{list.icon} {list.title}</i> : null}
                 </button>
-                {list.id !== "default-growth" ? (
-                  <button className="icon-delete" type="button" aria-label={`Удалить ${list.title}`} onClick={() => removeList(list)}>×</button>
-                ) : null}
-              </div>
+                <button className="info-button" type="button" aria-label="Информация" onClick={() => onInfo(note.id)}>i</button>
+              </article>
+            );
+          })
+        )}
+      </div>
+
+      <button className="floating-add" type="button" aria-label="Создать заметку" onClick={onCreate}>+</button>
+    </section>
+  );
+}
+
+type NoteModalProps = {
+  mode: ModalMode;
+  form: typeof emptyNoteForm;
+  lists: ReminderList[];
+  onAddReminder: () => void;
+  onClose: () => void;
+  onRemoveReminder: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  setForm: React.Dispatch<React.SetStateAction<typeof emptyNoteForm>>;
+};
+
+function NoteModal({ mode, form, lists, onAddReminder, onClose, onRemoveReminder, onSubmit, setForm }: NoteModalProps) {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <form className="modal-sheet" onSubmit={onSubmit}>
+        <div className="modal-header">
+          <button className="text-button" type="button" onClick={onClose}>Отмена</button>
+          <h2>{mode === "edit" ? "Заметка" : "Новая заметка"}</h2>
+          <button className="text-button primary" type="submit">Готово</button>
+        </div>
+        <input aria-label="Название заметки" autoFocus placeholder="Название" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
+        <textarea aria-label="Текст заметки" placeholder="Заметка" value={form.body} onChange={(event) => setForm((current) => ({ ...current, body: event.target.value }))} />
+        <select value={form.listId} onChange={(event) => setForm((current) => ({ ...current, listId: event.target.value }))}>
+          {lists.map((list) => <option key={list.id} value={list.id}>{list.icon} {list.title}</option>)}
+        </select>
+        <div className="date-row">
+          <input type="datetime-local" value={form.reminderDraft} onChange={(event) => setForm((current) => ({ ...current, reminderDraft: event.target.value }))} />
+          <button className="secondary-button" type="button" onClick={onAddReminder}>Добавить дату</button>
+        </div>
+        {form.reminders.length > 0 ? (
+          <div className="chips">
+            {form.reminders.map((reminder) => (
+              <button className="chip" key={reminder} type="button" onClick={() => onRemoveReminder(reminder)}>{formatReminder(reminder)} ×</button>
             ))}
           </div>
+        ) : null}
+      </form>
+    </div>
+  );
+}
 
-          <form className="new-list-form" onSubmit={handleListSubmit}>
-            <input aria-label="Название списка" placeholder="Новый список" value={listForm.title} onChange={(event) => setListForm((current) => ({ ...current, title: event.target.value }))} />
-            <div className="picker-row">
-              {listIcons.map((icon) => (
-                <button className={listForm.icon === icon ? "picker active" : "picker"} key={icon} type="button" onClick={() => setListForm((current) => ({ ...current, icon }))}>{icon}</button>
-              ))}
-            </div>
-            <div className="picker-row">
-              {listColors.map((color) => (
-                <button className={listForm.color === color ? "swatch active" : "swatch"} key={color} style={{ backgroundColor: color }} type="button" onClick={() => setListForm((current) => ({ ...current, color }))} />
-              ))}
-            </div>
-            <button className="secondary-button full" type="submit">Создать список</button>
-          </form>
-        </aside>
+type ListModalProps = {
+  form: typeof emptyListForm;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  setForm: React.Dispatch<React.SetStateAction<typeof emptyListForm>>;
+};
 
-        <main className="tasks-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">{activeTitle}</p>
-              <h2>{visibleNotes.length} задач</h2>
-            </div>
-          </div>
+function ListModal({ form, onClose, onSubmit, setForm }: ListModalProps) {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <form className="modal-sheet small" onSubmit={onSubmit}>
+        <div className="modal-header">
+          <button className="text-button" type="button" onClick={onClose}>Отмена</button>
+          <h2>Новый список</h2>
+          <button className="text-button primary" type="submit">Готово</button>
+        </div>
+        <label className="emoji-field">
+          <span style={{ backgroundColor: form.color }}>{form.icon || "•"}</span>
+          <input aria-label="Эмодзи списка" maxLength={4} placeholder="Эмодзи" value={form.icon} onChange={(event) => setForm((current) => ({ ...current, icon: event.target.value }))} />
+        </label>
+        <input aria-label="Название списка" autoFocus placeholder="Название списка" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
+        <div className="swatches">
+          {listColors.map((color) => (
+            <button className={form.color === color ? "swatch active" : "swatch"} key={color} style={{ backgroundColor: color }} type="button" onClick={() => setForm((current) => ({ ...current, color }))} />
+          ))}
+        </div>
+      </form>
+    </div>
+  );
+}
 
-          <form className="composer reminder-composer" onSubmit={handleNoteSubmit}>
-            <input aria-label="Название задачи" placeholder="Новая задача" value={noteForm.title} onChange={(event) => setNoteForm((current) => ({ ...current, title: event.target.value }))} />
-            <textarea aria-label="Заметка к задаче" placeholder="Заметка, идея, контекст..." value={noteForm.body} onChange={(event) => setNoteForm((current) => ({ ...current, body: event.target.value }))} />
-            <div className="form-grid">
-              <label>
-                <span>Список</span>
-                <select value={noteForm.listId} onChange={(event) => setNoteForm((current) => ({ ...current, listId: event.target.value }))}>
-                  {lists.map((list) => <option key={list.id} value={list.id}>{list.icon} {list.title}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>Дата/время</span>
-                <div className="date-row">
-                  <input type="datetime-local" value={noteForm.reminderDraft} onChange={(event) => setNoteForm((current) => ({ ...current, reminderDraft: event.target.value }))} />
-                  <button className="ghost-button" type="button" onClick={addReminder}>Добавить</button>
-                </div>
-              </label>
-            </div>
-            {noteForm.reminders.length > 0 ? (
-              <div className="chips">
-                {noteForm.reminders.map((reminder) => (
-                  <button className="chip" key={reminder} type="button" onClick={() => removeReminder(reminder)}>{formatReminder(reminder)} ×</button>
-                ))}
-              </div>
-            ) : null}
-            <div className="toolbar">
-              <button className="primary-button" type="submit">{editingId ? "Сохранить" : "Добавить"}</button>
-              {editingId ? <button className="ghost-button" type="button" onClick={() => { setEditingId(null); setNoteForm(emptyNoteForm); }}>Отменить</button> : null}
-            </div>
-          </form>
+type InfoModalProps = {
+  list?: ReminderList;
+  note: Note;
+  onClose: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
+};
 
-          <div className="task-list" aria-live="polite">
-            {visibleNotes.length === 0 ? (
-              <div className="empty-state">В этом списке пока пусто.</div>
-            ) : (
-              visibleNotes.map((note) => {
-                const list = lists.find((item) => item.id === note.listId);
-                return (
-                  <article className={`task-card ${note.completed ? "completed" : ""}`} key={note.id}>
-                    <button className="complete-toggle" type="button" aria-label="Завершить" onClick={() => completeNote(note)}>{note.completed ? "✓" : ""}</button>
-                    <div className="task-content">
-                      <div className="note-meta">
-                        <span className="badge">{note.syncStatus}</span>
-                        {list ? <span>{list.icon} {list.title}</span> : null}
-                      </div>
-                      <h3>{note.title}</h3>
-                      {note.body ? <p>{note.body}</p> : null}
-                      {note.reminders.length > 0 ? (
-                        <div className="reminder-list">{note.reminders.map((reminder) => <span key={reminder}>{formatReminder(reminder)}</span>)}</div>
-                      ) : null}
-                      <div className="note-actions">
-                        <button className="secondary-button" type="button" onClick={() => startEdit(note)}>Редактировать</button>
-                        <button className="danger-button" type="button" onClick={() => removeNote(note)}>Удалить</button>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })
-            )}
-          </div>
-        </main>
+function InfoModal({ list, note, onClose, onDelete, onEdit }: InfoModalProps) {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal-sheet small">
+        <div className="modal-header">
+          <button className="text-button" type="button" onClick={onClose}>Закрыть</button>
+          <h2>Информация</h2>
+          <span />
+        </div>
+        <div className="info-block">
+          <strong>{note.title}</strong>
+          {note.body ? <p>{note.body}</p> : null}
+          <span>{list ? `${list.icon} ${list.title}` : "Без списка"}</span>
+          <span>{note.syncStatus}</span>
+          {note.reminders.map((reminder) => <span key={reminder}>{formatReminder(reminder)}</span>)}
+        </div>
+        <div className="modal-actions">
+          <button className="secondary-button" type="button" onClick={onEdit}>Редактировать</button>
+          <button className="danger-button" type="button" onClick={onDelete}>Удалить</button>
+        </div>
       </div>
-    </section>
+    </div>
   );
 }
 
