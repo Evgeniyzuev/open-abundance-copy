@@ -37,6 +37,21 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .tabbar-title { overflow: hidden; color: var(--text); font-size: 17px; font-weight: 800; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .placeholder-screen { max-width: 610px; min-height: calc(100vh - 182px); margin: 0 auto; display: grid; place-items: center; }
 .placeholder-screen h1 { margin: 0; color: var(--text); font-size: 30px; }
+.wishes-screen { max-width: 610px; margin: 0 auto; }
+.wish-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; }
+.wish-tile { position: relative; aspect-ratio: 1; overflow: hidden; border-radius: 7px; background: #d8d8de; color: white; text-align: left; }
+.wish-tile::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.02) 38%, rgba(0,0,0,0.6) 100%); }
+.wish-tile img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.wish-tile span { position: absolute; left: 9px; right: 8px; bottom: 8px; z-index: 1; overflow: hidden; color: white; font-size: 16px; font-weight: 800; line-height: 1.12; text-shadow: 0 1px 8px rgba(0,0,0,0.55); }
+.wishes-state { min-height: 220px; display: grid; place-items: center; color: var(--muted); font-size: 15px; }
+.wish-modal { overflow: hidden; padding: 0; }
+.wish-modal .modal-header { padding: 14px 14px 0; }
+.wish-modal-image { width: 100%; aspect-ratio: 1.35; display: block; object-fit: cover; }
+.wish-modal-body { display: grid; gap: 8px; padding: 14px; }
+.wish-modal-body strong { color: var(--blue); font-size: 13px; text-transform: uppercase; }
+.wish-modal-body p { margin: 0; color: var(--text); font-size: 17px; line-height: 1.36; }
+.wish-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.wish-meta span { min-height: 30px; display: inline-flex; align-items: center; border-radius: 999px; padding: 0 10px; background: #eef6ff; color: var(--blue); font-size: 13px; font-weight: 800; }
 .reminders-app { position: relative; max-width: 610px; min-height: calc(100vh - 40px); margin: 0 auto; padding-bottom: 88px; }
 .home-topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 52px; }
 .status-line { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; }

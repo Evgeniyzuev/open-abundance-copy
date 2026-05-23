@@ -3,6 +3,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { CheckCircle2, CheckSquare, FileText, Heart, Map, Sparkles, Target, TrendingUp, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import RecommendedWishes from "@/components/RecommendedWishes";
 
 type MainTabId = "goals" | "tasks" | "spark" | "wallet" | "people";
 type GoalTabId = "desires" | "notes" | "checks" | "map" | "growth";
@@ -63,12 +64,15 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
 
   const currentTitle = getCurrentTitle(activeMainTab, activeGoalTab);
   const showNotes = activeMainTab === "goals" && activeGoalTab === "notes";
+  const showWishes = activeMainTab === "goals" && activeGoalTab === "desires";
 
   return (
     <>
       <TopTabBar activeMainTab={activeMainTab} activeGoalTab={activeGoalTab} hidden={navHidden} onGoalTabChange={setActiveGoalTab} />
       <section className="app-content">
-        {showNotes ? notesSlot : <PlaceholderScreen title={currentTitle} />}
+        {showNotes ? notesSlot : null}
+        {showWishes ? <RecommendedWishes /> : null}
+        {!showNotes && !showWishes ? <PlaceholderScreen title={currentTitle} /> : null}
       </section>
       <BottomTabBar activeTab={activeMainTab} hidden={navHidden} onTabChange={setActiveMainTab} />
     </>

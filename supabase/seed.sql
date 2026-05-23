@@ -1,0 +1,1 @@
+-- Optional local seed data for Supabase CLI.

@@ -1,0 +1,2 @@
+-- Snapshot of the current remote schema can be generated with:
+-- pnpm dlx supabase db dump --schema public -f supabase/schema.sql
