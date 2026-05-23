@@ -15,7 +15,11 @@ type WishesResponse = {
 
 const WISHES_CACHE_KEY = "open-abundance:recommended-wishes:v1";
 
-export default function RecommendedWishes() {
+type RecommendedWishesProps = {
+  refreshNonce: number;
+};
+
+export default function RecommendedWishes({ refreshNonce }: RecommendedWishesProps) {
   const [wishes, setWishes] = useState<RecommendedWish[]>([]);
   const [selectedWish, setSelectedWish] = useState<RecommendedWish | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
@@ -64,7 +68,7 @@ export default function RecommendedWishes() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [refreshNonce]);
 
   return (
     <section className="wishes-screen">

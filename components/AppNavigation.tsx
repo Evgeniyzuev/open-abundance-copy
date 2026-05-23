@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { CheckCircle2, CheckSquare, FileText, Heart, Map, Sparkles, Target, TrendingUp, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import RecommendedWishes from "@/components/RecommendedWishes";
@@ -40,10 +40,19 @@ const goalTabs: GoalTab[] = [
   { id: "growth", title: "Рост", icon: TrendingUp }
 ];
 
+const REFRESH_COOLDOWN_MS = 5_000;
+const PULL_THRESHOLD_PX = 72;
+
 export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const [activeMainTab, setActiveMainTab] = useState<MainTabId>("goals");
   const [activeGoalTab, setActiveGoalTab] = useState<GoalTabId>("notes");
   const [navHidden, setNavHidden] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [isPulling, setIsPulling] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const lastRefreshAtRef = useRef(0);
+  const pullDistanceRef = useRef(0);
+  const touchStartYRef = useRef(0);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
@@ -62,16 +71,63 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  useEffect(() => {
+    const requestRefresh = () => {
+      const now = Date.now();
+      if (now - lastRefreshAtRef.current < REFRESH_COOLDOWN_MS) return;
+      lastRefreshAtRef.current = now;
+      setRefreshNonce((value) => value + 1);
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (window.scrollY > 0 || event.touches.length !== 1) return;
+      touchStartYRef.current = event.touches[0].clientY;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (window.scrollY > 0 || touchStartYRef.current === 0) return;
+      const distance = event.touches[0].clientY - touchStartYRef.current;
+      if (distance <= 0) return;
+      const nextDistance = Math.min(distance, PULL_THRESHOLD_PX);
+      pullDistanceRef.current = nextDistance;
+      setIsPulling(true);
+      setPullDistance(nextDistance);
+    };
+
+    const handleTouchEnd = () => {
+      if (pullDistanceRef.current >= PULL_THRESHOLD_PX) requestRefresh();
+      touchStartYRef.current = 0;
+      pullDistanceRef.current = 0;
+      setIsPulling(false);
+      setPullDistance(0);
+    };
+
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchmove", handleTouchMove, { passive: true });
+    window.addEventListener("touchend", handleTouchEnd);
+    window.addEventListener("touchcancel", handleTouchEnd);
+
+    return () => {
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("touchcancel", handleTouchEnd);
+    };
+  }, []);
+
   const currentTitle = getCurrentTitle(activeMainTab, activeGoalTab);
   const showNotes = activeMainTab === "goals" && activeGoalTab === "notes";
   const showWishes = activeMainTab === "goals" && activeGoalTab === "desires";
 
   return (
     <>
+      <div className={`pull-refresh-indicator ${isPulling ? "visible" : ""}`} style={{ transform: `translate(-50%, ${pullDistance}px)` }}>
+        {pullDistance >= PULL_THRESHOLD_PX ? "Отпустите" : "Потяните"}
+      </div>
       <TopTabBar activeMainTab={activeMainTab} activeGoalTab={activeGoalTab} hidden={navHidden} onGoalTabChange={setActiveGoalTab} />
       <section className="app-content">
         {showNotes ? notesSlot : null}
-        {showWishes ? <RecommendedWishes /> : null}
+        {showWishes ? <RecommendedWishes refreshNonce={refreshNonce} /> : null}
         {!showNotes && !showWishes ? <PlaceholderScreen title={currentTitle} /> : null}
       </section>
       <BottomTabBar activeTab={activeMainTab} hidden={navHidden} onTabChange={setActiveMainTab} />
