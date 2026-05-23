@@ -1,0 +1,18 @@
+{
+  "name": "Open Abundance",
+  "short_name": "Abundance",
+  "description": "Offline-first growth app prototype",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f7f3",
+  "theme_color": "#0f8f72",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
