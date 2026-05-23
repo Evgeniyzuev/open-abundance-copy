@@ -33,6 +33,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .dot.offline { background: #ff9500; }
 .top-actions, .detail-actions { display: inline-flex; align-items: center; gap: 8px; padding: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.72); box-shadow: 0 10px 30px rgba(30, 30, 40, 0.1); backdrop-filter: blur(14px); }
 .round-button { min-width: 40px; height: 40px; border-radius: 999px; background: transparent; color: var(--text); font-size: 18px; font-weight: 800; }
+.search-button { font-size: 34px; font-weight: 500; line-height: 0.8; transform: rotate(-20deg); }
+.list-create-button { position: relative; font-size: 27px; line-height: 1; }
+.list-create-button::after { content: "+"; position: absolute; right: 2px; bottom: 4px; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--surface); color: var(--text); font-size: 15px; font-weight: 900; line-height: 1; box-shadow: 0 0 0 2px rgba(255,255,255,0.84); }
+.primary-add-button { min-width: 28px; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; background: #1f95ff; color: white; font-size: 25px; font-weight: 700; line-height: 1; box-shadow: 0 6px 16px rgba(31, 149, 255, 0.28); }
 .smart-grid.compact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
 .smart-card { min-height: 108px; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr; align-items: start; gap: 8px; border-radius: 14px; padding: 14px 16px; color: white; text-align: left; box-shadow: inset 0 -24px 44px rgba(0,0,0,0.12); }
 .smart-card.blue { background: linear-gradient(135deg, #62c6ff, #0a84ff); }

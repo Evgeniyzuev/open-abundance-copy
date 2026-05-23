@@ -66,7 +66,6 @@ export default function NotesApp() {
   const [listModalOpen, setListModalOpen] = useState(false);
   const [infoNoteId, setInfoNoteId] = useState<string | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("online");
-  const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
   const activeView = detailView ?? "all";
@@ -94,14 +93,9 @@ export default function NotesApp() {
 
   async function syncNow() {
     if (!navigator.onLine) return;
-    setIsSyncing(true);
-    try {
-      await syncPendingNotes();
-      setLastSync(new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }));
-      await refreshData();
-    } finally {
-      setIsSyncing(false);
-    }
+    await syncPendingNotes();
+    setLastSync(new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }));
+    await refreshData();
   }
 
   useEffect(() => {
@@ -251,7 +245,6 @@ export default function NotesApp() {
       ) : (
         <HomeScreen
           connection={connection}
-          isSyncing={isSyncing}
           lastSync={lastSync}
           lists={lists}
           notes={notes}
@@ -260,7 +253,6 @@ export default function NotesApp() {
           onCreateNote={openCreateNote}
           onDeleteList={removeListConfirmed}
           onOpenList={openList}
-          onSync={syncNow}
         />
       )}
 
@@ -301,7 +293,6 @@ export default function NotesApp() {
 
 type HomeScreenProps = {
   connection: ConnectionState;
-  isSyncing: boolean;
   lastSync: string | null;
   lists: ReminderList[];
   notes: Note[];
@@ -310,10 +301,9 @@ type HomeScreenProps = {
   onCreateNote: () => void;
   onDeleteList: (list: ReminderList) => void;
   onOpenList: (view: ViewId) => void;
-  onSync: () => void;
 };
 
-function HomeScreen({ connection, isSyncing, lastSync, lists, notes, pendingCount, onCreateList, onCreateNote, onDeleteList, onOpenList, onSync }: HomeScreenProps) {
+function HomeScreen({ connection, lastSync, lists, notes, pendingCount, onCreateList, onCreateNote, onDeleteList, onOpenList }: HomeScreenProps) {
   return (
     <>
       <header className="home-topbar">
@@ -324,9 +314,9 @@ function HomeScreen({ connection, isSyncing, lastSync, lists, notes, pendingCoun
           <span>{lastSync ?? "еще нет"}</span>
         </div>
         <div className="top-actions">
-          <button className="round-button" type="button" aria-label="Синхронизировать" disabled={connection === "offline" || isSyncing || pendingCount === 0} onClick={onSync}>↻</button>
-          <button className="round-button" type="button" aria-label="Создать список" onClick={onCreateList}>+</button>
-          <button className="round-button" type="button" aria-label="Еще">•••</button>
+          <button className="round-button search-button" type="button" aria-label="Поиск">⌕</button>
+          <button className="round-button list-create-button" type="button" aria-label="Создать список" onClick={onCreateList}>▦</button>
+          <button className="round-button primary-add-button" type="button" aria-label="Создать заметку" onClick={onCreateNote}>+</button>
         </div>
       </header>
 
@@ -348,7 +338,7 @@ function HomeScreen({ connection, isSyncing, lastSync, lists, notes, pendingCoun
               <button type="button" onClick={() => onOpenList(`list:${list.id}`)}>
                 <span className="list-icon" style={{ backgroundColor: list.color }}>{list.icon}</span>
                 <span>{list.title}</span>
-                <strong>{notes.filter((note) => !note.deleted && note.listId === list.id).length}</strong>
+                <strong>{getListCount(list.id, notes)}</strong>
                 <span className="chevron">›</span>
               </button>
               <button className="row-delete" type="button" aria-label={`Удалить ${list.title}`} onClick={() => onDeleteList(list)}>×</button>
@@ -356,8 +346,6 @@ function HomeScreen({ connection, isSyncing, lastSync, lists, notes, pendingCoun
           ))}
         </div>
       </section>
-
-      <button className="floating-add" type="button" aria-label="Создать заметку" onClick={onCreateNote}>+</button>
     </>
   );
 }
@@ -522,13 +510,17 @@ function filterNotes(notes: Note[], view: ViewId): Note[] {
   if (view === "today") return notes.filter((note) => !note.completed && note.reminders.some(isTodayReminder));
   if (view === "planned") return notes.filter((note) => !note.completed && note.reminders.length > 0);
   if (view === "completed") return notes.filter((note) => note.completed);
-  if (view === "all") return notes;
+  if (view === "all") return notes.filter((note) => !note.completed);
   if (view.startsWith("list:")) return notes.filter((note) => !note.completed && note.listId === view.slice(5));
   return notes;
 }
 
 function getSmartCount(view: ViewId, notes: Note[]): number {
   return filterNotes(notes.filter((note) => !note.deleted), view).length;
+}
+
+function getListCount(listId: string, notes: Note[]): number {
+  return notes.filter((note) => !note.deleted && !note.completed && note.listId === listId).length;
 }
 
 function getViewTitle(view: ViewId, lists: ReminderList[]): string {
