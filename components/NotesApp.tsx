@@ -27,8 +27,8 @@ type SmartList = {
 
 const smartLists: SmartList[] = [
   { id: "today", title: "Сегодня", icon: "23", tone: "blue" },
-  { id: "planned", title: "В планах", icon: "□", tone: "red" },
-  { id: "all", title: "Все", icon: "▱", tone: "black" },
+  { id: "planned", title: "В планах", icon: "🗓", tone: "red" },
+  { id: "all", title: "Все", icon: "📥", tone: "black" },
   { id: "completed", title: "Завершено", icon: "✓", tone: "gray" }
 ];
 
