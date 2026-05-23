@@ -1,9 +1,24 @@
-export type SyncStatus = "local" | "pending_sync" | "synced" | "failed";
+﻿export type SyncStatus = "local" | "pending_sync" | "synced" | "failed";
+
+export type ReminderList = {
+  id: string;
+  title: string;
+  icon: string;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+  syncStatus: SyncStatus;
+  serverVersion?: string;
+};
 
 export type Note = {
   id: string;
   title: string;
   body: string;
+  listId?: string;
+  reminders: string[];
+  completed: boolean;
   createdAt: string;
   updatedAt: string;
   deleted?: boolean;
@@ -12,40 +27,134 @@ export type Note = {
 };
 
 const DB_NAME = "open-abundance-offline";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const NOTES_STORE = "notes";
+const LISTS_STORE = "lists";
+const DEFAULT_LIST_ID = "default-growth";
 
-type NoteInput = Pick<Note, "id" | "title" | "body" | "syncStatus">;
+export const defaultList: ReminderList = {
+  id: DEFAULT_LIST_ID,
+  title: "Рост",
+  icon: "↗",
+  color: "#0f8f72",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  syncStatus: "synced"
+};
+
+type NoteInput = Pick<Note, "id" | "title" | "body" | "syncStatus"> & {
+  listId?: string;
+  reminders?: string[];
+  completed?: boolean;
+};
+
+type ListInput = Pick<ReminderList, "id" | "title" | "icon" | "color" | "syncStatus">;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
+
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(NOTES_STORE)) {
         db.createObjectStore(NOTES_STORE, { keyPath: "id" });
       }
+      if (!db.objectStoreNames.contains(LISTS_STORE)) {
+        db.createObjectStore(LISTS_STORE, { keyPath: "id" });
+      }
     };
+
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
 }
 
-async function withStore<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+async function withStore<T>(
+  storeName: string,
+  mode: IDBTransactionMode,
+  action: (store: IDBObjectStore) => IDBRequest<T>
+): Promise<T> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(NOTES_STORE, mode);
-    const store = tx.objectStore(NOTES_STORE);
+    const tx = db.transaction(storeName, mode);
+    const store = tx.objectStore(storeName);
     const request = action(store);
+
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
     tx.oncomplete = () => db.close();
-    tx.onerror = () => { db.close(); reject(tx.error); };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
   });
 }
 
+export async function ensureDefaultLists(): Promise<void> {
+  const existing = await getList(DEFAULT_LIST_ID);
+  if (!existing) {
+    await withStore<IDBValidKey>(LISTS_STORE, "readwrite", (store) => store.put(defaultList));
+  }
+}
+
 export async function getNotes(): Promise<Note[]> {
-  return withStore<Note[]>("readonly", (store) => store.getAll());
+  await ensureDefaultLists();
+  const notes = await withStore<Note[]>(NOTES_STORE, "readonly", (store) => store.getAll());
+  return notes.map(normalizeNote);
+}
+
+export async function getLists(): Promise<ReminderList[]> {
+  await ensureDefaultLists();
+  const lists = await withStore<ReminderList[]>(LISTS_STORE, "readonly", (store) => store.getAll());
+  return lists.filter((list) => !list.deleted).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
+export async function saveList(input: ListInput): Promise<ReminderList> {
+  const now = new Date().toISOString();
+  const existing = await getList(input.id);
+  const list: ReminderList = {
+    id: input.id,
+    title: input.title,
+    icon: input.icon || "•",
+    color: input.color || "#0f8f72",
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    syncStatus: input.syncStatus
+  };
+
+  await withStore<IDBValidKey>(LISTS_STORE, "readwrite", (store) => store.put(list));
+  return list;
+}
+
+export async function deleteList(id: string): Promise<void> {
+  if (id === DEFAULT_LIST_ID) return;
+  const existing = await getList(id);
+  if (!existing) return;
+
+  await withStore<IDBValidKey>(LISTS_STORE, "readwrite", (store) =>
+    store.put({
+      ...existing,
+      deleted: true,
+      updatedAt: new Date().toISOString(),
+      syncStatus: navigator.onLine ? "pending_sync" : "local"
+    })
+  );
+
+  const notes = await getNotes();
+  await Promise.all(
+    notes
+      .filter((note) => note.listId === id)
+      .map((note) =>
+        withStore<IDBValidKey>(NOTES_STORE, "readwrite", (store) =>
+          store.put({
+            ...note,
+            listId: DEFAULT_LIST_ID,
+            updatedAt: new Date().toISOString(),
+            syncStatus: navigator.onLine ? "pending_sync" : "local"
+          })
+        )
+      )
+  );
 }
 
 export async function saveNote(input: NoteInput): Promise<Note> {
@@ -55,40 +164,101 @@ export async function saveNote(input: NoteInput): Promise<Note> {
     id: input.id,
     title: input.title,
     body: input.body,
+    listId: input.listId || existing?.listId || DEFAULT_LIST_ID,
+    reminders: input.reminders ?? existing?.reminders ?? [],
+    completed: input.completed ?? existing?.completed ?? false,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
     syncStatus: input.syncStatus
   };
-  await withStore<IDBValidKey>("readwrite", (store) => store.put(note));
+
+  await withStore<IDBValidKey>(NOTES_STORE, "readwrite", (store) => store.put(note));
   return note;
+}
+
+export async function toggleNoteCompleted(id: string): Promise<void> {
+  const existing = await getNote(id);
+  if (!existing) return;
+  await withStore<IDBValidKey>(NOTES_STORE, "readwrite", (store) =>
+    store.put({
+      ...normalizeNote(existing),
+      completed: !existing.completed,
+      updatedAt: new Date().toISOString(),
+      syncStatus: navigator.onLine ? "pending_sync" : "local"
+    })
+  );
 }
 
 export async function deleteNote(id: string): Promise<void> {
   const existing = await getNote(id);
   if (!existing) return;
-  await withStore<IDBValidKey>("readwrite", (store) => store.put({ ...existing, deleted: true, updatedAt: new Date().toISOString(), syncStatus: navigator.onLine ? "pending_sync" : "local" }));
+  await withStore<IDBValidKey>(NOTES_STORE, "readwrite", (store) =>
+    store.put({
+      ...normalizeNote(existing),
+      deleted: true,
+      updatedAt: new Date().toISOString(),
+      syncStatus: navigator.onLine ? "pending_sync" : "local"
+    })
+  );
 }
 
 async function getNote(id: string): Promise<Note | undefined> {
-  return withStore<Note | undefined>("readonly", (store) => store.get(id));
+  const note = await withStore<Note | undefined>(NOTES_STORE, "readonly", (store) => store.get(id));
+  return note ? normalizeNote(note) : undefined;
+}
+
+async function getList(id: string): Promise<ReminderList | undefined> {
+  return withStore<ReminderList | undefined>(LISTS_STORE, "readonly", (store) => store.get(id));
+}
+
+function normalizeNote(note: Note): Note {
+  return {
+    ...note,
+    listId: note.listId || DEFAULT_LIST_ID,
+    reminders: Array.isArray(note.reminders) ? note.reminders : [],
+    completed: Boolean(note.completed)
+  };
 }
 
 export async function syncPendingNotes(): Promise<void> {
-  const notes = await getNotes();
-  const pendingNotes = notes.filter((note) => note.syncStatus !== "synced");
-  if (pendingNotes.length === 0) return;
+  const notes = await withStore<Note[]>(NOTES_STORE, "readonly", (store) => store.getAll());
+  const lists = await withStore<ReminderList[]>(LISTS_STORE, "readonly", (store) => store.getAll());
+  const pendingNotes = notes.map(normalizeNote).filter((note) => note.syncStatus !== "synced");
+  const pendingLists = lists.filter((list) => list.syncStatus !== "synced");
+  if (pendingNotes.length === 0 && pendingLists.length === 0) return;
 
   try {
     const response = await fetch("/api/notes/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: pendingNotes })
+      body: JSON.stringify({ notes: pendingNotes, lists: pendingLists })
     });
+
     if (!response.ok) throw new Error("Sync failed");
-    const result = (await response.json()) as { notes: Note[] };
-    await Promise.all(result.notes.map((note) => note.deleted ? withStore<undefined>("readwrite", (store) => store.delete(note.id)) : withStore<IDBValidKey>("readwrite", (store) => store.put(note))));
+
+    const result = (await response.json()) as { notes: Note[]; lists: ReminderList[] };
+
+    await Promise.all([
+      ...result.notes.map((note) =>
+        note.deleted
+          ? withStore<undefined>(NOTES_STORE, "readwrite", (store) => store.delete(note.id))
+          : withStore<IDBValidKey>(NOTES_STORE, "readwrite", (store) => store.put(normalizeNote(note)))
+      ),
+      ...result.lists.map((list) =>
+        list.deleted
+          ? withStore<undefined>(LISTS_STORE, "readwrite", (store) => store.delete(list.id))
+          : withStore<IDBValidKey>(LISTS_STORE, "readwrite", (store) => store.put(list))
+      )
+    ]);
   } catch (error) {
-    await Promise.all(pendingNotes.map((note) => withStore<IDBValidKey>("readwrite", (store) => store.put({ ...note, syncStatus: "failed" }))));
+    await Promise.all([
+      ...pendingNotes.map((note) =>
+        withStore<IDBValidKey>(NOTES_STORE, "readwrite", (store) => store.put({ ...note, syncStatus: "failed" }))
+      ),
+      ...pendingLists.map((list) =>
+        withStore<IDBValidKey>(LISTS_STORE, "readwrite", (store) => store.put({ ...list, syncStatus: "failed" }))
+      )
+    ]);
     throw error;
   }
 }
