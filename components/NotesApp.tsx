@@ -66,7 +66,6 @@ export default function NotesApp() {
   const [listModalOpen, setListModalOpen] = useState(false);
   const [infoNoteId, setInfoNoteId] = useState<string | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("online");
-  const [lastSync, setLastSync] = useState<string | null>(null);
 
   const activeView = detailView ?? "all";
   const activeTitle = getViewTitle(activeView, lists);
@@ -94,7 +93,6 @@ export default function NotesApp() {
   async function syncNow() {
     if (!navigator.onLine) return;
     await syncPendingNotes();
-    setLastSync(new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }));
     await refreshData();
   }
 
@@ -245,7 +243,6 @@ export default function NotesApp() {
       ) : (
         <HomeScreen
           connection={connection}
-          lastSync={lastSync}
           lists={lists}
           notes={notes}
           pendingCount={pendingCount}
@@ -293,7 +290,6 @@ export default function NotesApp() {
 
 type HomeScreenProps = {
   connection: ConnectionState;
-  lastSync: string | null;
   lists: ReminderList[];
   notes: Note[];
   pendingCount: number;
@@ -303,7 +299,7 @@ type HomeScreenProps = {
   onOpenList: (view: ViewId) => void;
 };
 
-function HomeScreen({ connection, lastSync, lists, notes, pendingCount, onCreateList, onCreateNote, onDeleteList, onOpenList }: HomeScreenProps) {
+function HomeScreen({ connection, lists, notes, pendingCount, onCreateList, onCreateNote, onDeleteList, onOpenList }: HomeScreenProps) {
   return (
     <>
       <header className="home-topbar">
@@ -311,7 +307,6 @@ function HomeScreen({ connection, lastSync, lists, notes, pendingCount, onCreate
           <span className={`dot ${connection}`} />
           <span>{connection}</span>
           <span>{pendingCount} sync</span>
-          <span>{lastSync ?? "еще нет"}</span>
         </div>
         <div className="top-actions">
           <button className="round-button search-button" type="button" aria-label="Поиск">⌕</button>
