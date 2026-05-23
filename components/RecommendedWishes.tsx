@@ -13,15 +13,32 @@ type WishesResponse = {
   error?: string;
 };
 
+const WISHES_CACHE_KEY = "open-abundance:recommended-wishes:v1";
+
 export default function RecommendedWishes() {
   const [wishes, setWishes] = useState<RecommendedWish[]>([]);
   const [selectedWish, setSelectedWish] = useState<RecommendedWish | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     let mounted = true;
 
     async function loadWishes() {
+      const cachedWishes = readCachedWishes();
+
+      if (cachedWishes.length > 0) {
+        setWishes(cachedWishes);
+        setStatus("ready");
+      }
+
+      if (!navigator.onLine) {
+        setStatus(cachedWishes.length > 0 ? "ready" : "offline");
+        return;
+      }
+
+      setIsRefreshing(cachedWishes.length > 0);
+
       try {
         const response = await fetch("/api/recommended-wishes", { cache: "no-store" });
         const payload = (await response.json()) as WishesResponse;
@@ -31,11 +48,15 @@ export default function RecommendedWishes() {
         }
 
         if (mounted) {
-          setWishes(payload.wishes ?? []);
+          const nextWishes = payload.wishes ?? [];
+          setWishes(nextWishes);
+          writeCachedWishes(nextWishes);
           setStatus("ready");
         }
       } catch {
-        if (mounted) setStatus("error");
+        if (mounted) setStatus(cachedWishes.length > 0 ? "ready" : "offline");
+      } finally {
+        if (mounted) setIsRefreshing(false);
       }
     }
 
@@ -47,9 +68,11 @@ export default function RecommendedWishes() {
 
   return (
     <section className="wishes-screen">
-      {status === "loading" ? <div className="wishes-state">Загрузка...</div> : null}
-      {status === "error" ? <div className="wishes-state">Не удалось загрузить желания.</div> : null}
-      {status === "ready" ? (
+      {status === "loading" ? <WishOfflineState title="Загрузка..." description="Подготавливаем рекомендации." /> : null}
+      {status === "offline" ? <WishOfflineState title="Нет подключения" description="Когда интернет появится, рекомендации загрузятся автоматически. Картинки останутся внешними и не сохраняются локально." /> : null}
+      {wishes.length > 0 ? (
+        <>
+        {isRefreshing ? <div className="wishes-refreshing">Обновляем...</div> : null}
         <div className="wish-grid" aria-label="Рекомендованные желания">
           {wishes.map((wish) => (
             <button className="wish-tile" key={wish.id} type="button" onClick={() => setSelectedWish(wish)}>
@@ -58,10 +81,21 @@ export default function RecommendedWishes() {
             </button>
           ))}
         </div>
+        </>
       ) : null}
 
       {selectedWish ? <WishDetailModal wish={selectedWish} onClose={() => setSelectedWish(null)} /> : null}
     </section>
+  );
+}
+
+function WishOfflineState({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="wish-offline-state">
+      <div className="wish-offline-icon">♡</div>
+      <strong>{title}</strong>
+      <p>{description}</p>
+    </div>
   );
 }
 
@@ -91,4 +125,23 @@ function WishDetailModal({ wish, onClose }: WishDetailModalProps) {
       </div>
     </div>
   );
+}
+
+function readCachedWishes(): RecommendedWish[] {
+  try {
+    const value = window.localStorage.getItem(WISHES_CACHE_KEY);
+    if (!value) return [];
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? (parsed as RecommendedWish[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedWishes(wishes: RecommendedWish[]) {
+  try {
+    window.localStorage.setItem(WISHES_CACHE_KEY, JSON.stringify(wishes));
+  } catch {
+    // Cache is a convenience layer only.
+  }
 }
