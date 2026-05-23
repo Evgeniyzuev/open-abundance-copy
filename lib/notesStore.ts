@@ -30,17 +30,6 @@ const DB_NAME = "open-abundance-offline";
 const DB_VERSION = 2;
 const NOTES_STORE = "notes";
 const LISTS_STORE = "lists";
-const DEFAULT_LIST_ID = "default-growth";
-
-export const defaultList: ReminderList = {
-  id: DEFAULT_LIST_ID,
-  title: "Рост",
-  icon: "↗",
-  color: "#0f8f72",
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-01T00:00:00.000Z",
-  syncStatus: "synced"
-};
 
 type NoteInput = Pick<Note, "id" | "title" | "body" | "syncStatus"> & {
   listId?: string;
@@ -90,21 +79,12 @@ async function withStore<T>(
   });
 }
 
-export async function ensureDefaultLists(): Promise<void> {
-  const existing = await getList(DEFAULT_LIST_ID);
-  if (!existing) {
-    await withStore<IDBValidKey>(LISTS_STORE, "readwrite", (store) => store.put(defaultList));
-  }
-}
-
 export async function getNotes(): Promise<Note[]> {
-  await ensureDefaultLists();
   const notes = await withStore<Note[]>(NOTES_STORE, "readonly", (store) => store.getAll());
   return notes.map(normalizeNote);
 }
 
 export async function getLists(): Promise<ReminderList[]> {
-  await ensureDefaultLists();
   const lists = await withStore<ReminderList[]>(LISTS_STORE, "readonly", (store) => store.getAll());
   return lists.filter((list) => !list.deleted).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
@@ -127,7 +107,6 @@ export async function saveList(input: ListInput): Promise<ReminderList> {
 }
 
 export async function deleteList(id: string): Promise<void> {
-  if (id === DEFAULT_LIST_ID) return;
   const existing = await getList(id);
   if (!existing) return;
 
@@ -148,7 +127,7 @@ export async function deleteList(id: string): Promise<void> {
         withStore<IDBValidKey>(NOTES_STORE, "readwrite", (store) =>
           store.put({
             ...note,
-            listId: DEFAULT_LIST_ID,
+            listId: undefined,
             updatedAt: new Date().toISOString(),
             syncStatus: navigator.onLine ? "pending_sync" : "local"
           })
@@ -164,7 +143,7 @@ export async function saveNote(input: NoteInput): Promise<Note> {
     id: input.id,
     title: input.title,
     body: input.body,
-    listId: input.listId || existing?.listId || DEFAULT_LIST_ID,
+    listId: input.listId ?? existing?.listId,
     reminders: input.reminders ?? existing?.reminders ?? [],
     completed: input.completed ?? existing?.completed ?? false,
     createdAt: existing?.createdAt ?? now,
@@ -181,7 +160,7 @@ export async function toggleNoteCompleted(id: string): Promise<void> {
   if (!existing) return;
   await withStore<IDBValidKey>(NOTES_STORE, "readwrite", (store) =>
     store.put({
-      ...normalizeNote(existing),
+      ...existing,
       completed: !existing.completed,
       updatedAt: new Date().toISOString(),
       syncStatus: navigator.onLine ? "pending_sync" : "local"
@@ -194,7 +173,7 @@ export async function deleteNote(id: string): Promise<void> {
   if (!existing) return;
   await withStore<IDBValidKey>(NOTES_STORE, "readwrite", (store) =>
     store.put({
-      ...normalizeNote(existing),
+      ...existing,
       deleted: true,
       updatedAt: new Date().toISOString(),
       syncStatus: navigator.onLine ? "pending_sync" : "local"
@@ -214,7 +193,6 @@ async function getList(id: string): Promise<ReminderList | undefined> {
 function normalizeNote(note: Note): Note {
   return {
     ...note,
-    listId: note.listId || DEFAULT_LIST_ID,
     reminders: Array.isArray(note.reminders) ? note.reminders : [],
     completed: Boolean(note.completed)
   };

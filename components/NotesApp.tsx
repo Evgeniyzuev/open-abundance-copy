@@ -26,19 +26,26 @@ type SmartList = {
 };
 
 const smartLists: SmartList[] = [
-  { id: "today", title: "Сегодня", icon: "23", tone: "blue" },
-  { id: "planned", title: "В планах", icon: "🗓", tone: "red" },
+  { id: "today", title: "Сегодня", icon: "🗓", tone: "blue" },
+  { id: "planned", title: "В планах", icon: "📋", tone: "red" },
   { id: "all", title: "Все", icon: "📥", tone: "black" },
-  { id: "completed", title: "Завершено", icon: "✓", tone: "gray" }
+  { id: "completed", title: "Завершено", icon: "✔️", tone: "gray" }
 ];
 
 const listColors = ["#ff9500", "#007aff", "#34c759", "#ff3b30", "#af52de", "#8e8e93"];
 
+function getDefaultReminderDraft(): string {
+  const now = new Date();
+  const offset = now.getTimezoneOffset();
+  const local = new Date(now.getTime() - offset * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 const emptyNoteForm = {
   title: "",
   body: "",
-  listId: "default-growth",
-  reminderDraft: "",
+  listId: "",
+  reminderDraft: getDefaultReminderDraft(),
   reminders: [] as string[]
 };
 
@@ -81,7 +88,7 @@ export default function NotesApp() {
     setNotes(storedNotes);
     setLists(storedLists);
     if (!storedLists.some((list) => list.id === noteForm.listId)) {
-      setNoteForm((current) => ({ ...current, listId: storedLists[0]?.id ?? "default-growth" }));
+      setNoteForm((current) => ({ ...current, listId: "" }));
     }
   }
 
@@ -124,7 +131,7 @@ export default function NotesApp() {
   }
 
   function openCreateNote() {
-    const listId = detailView?.startsWith("list:") ? detailView.slice(5) : lists[0]?.id ?? "default-growth";
+    const listId = detailView?.startsWith("list:") ? detailView.slice(5) : "";
     setEditingId(null);
     setNoteForm({ ...emptyNoteForm, listId });
     setNoteModalOpen(true);
@@ -135,7 +142,7 @@ export default function NotesApp() {
     setNoteForm({
       title: note.title,
       body: note.body,
-      listId: note.listId || lists[0]?.id || "default-growth",
+      listId: note.listId || "",
       reminderDraft: "",
       reminders: note.reminders || []
     });
@@ -159,7 +166,7 @@ export default function NotesApp() {
       id: editingId ?? crypto.randomUUID(),
       title: title || "Без названия",
       body,
-      listId: noteForm.listId,
+      listId: noteForm.listId || undefined,
       reminders: noteForm.reminders,
       syncStatus: navigator.onLine ? "pending_sync" : "local"
     });
@@ -219,7 +226,9 @@ export default function NotesApp() {
     if (navigator.onLine) await syncNow();
   }
 
-  async function removeList(list: ReminderList) {
+  async function removeListConfirmed(list: ReminderList) {
+    const confirmed = window.confirm(`Удалить список "${list.title}"? Заметки не будут привязаны к списку, но останутся во "Все".`);
+    if (!confirmed) return;
     await deleteList(list.id);
     setDetailView(null);
     await refreshData();
@@ -249,7 +258,7 @@ export default function NotesApp() {
           pendingCount={pendingCount}
           onCreateList={() => setListModalOpen(true)}
           onCreateNote={openCreateNote}
-          onDeleteList={removeList}
+          onDeleteList={removeListConfirmed}
           onOpenList={openList}
           onSync={syncNow}
         />
@@ -316,7 +325,7 @@ function HomeScreen({ connection, isSyncing, lastSync, lists, notes, pendingCoun
         </div>
         <div className="top-actions">
           <button className="round-button" type="button" aria-label="Синхронизировать" disabled={connection === "offline" || isSyncing || pendingCount === 0} onClick={onSync}>↻</button>
-          <button className="round-button" type="button" aria-label="Создать список" onClick={onCreateList}>▦+</button>
+          <button className="round-button" type="button" aria-label="Создать список" onClick={onCreateList}>+</button>
           <button className="round-button" type="button" aria-label="Еще">•••</button>
         </div>
       </header>
@@ -426,6 +435,7 @@ function NoteModal({ mode, form, lists, onAddReminder, onClose, onRemoveReminder
         <input aria-label="Название заметки" autoFocus placeholder="Название" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
         <textarea aria-label="Текст заметки" placeholder="Заметка" value={form.body} onChange={(event) => setForm((current) => ({ ...current, body: event.target.value }))} />
         <select value={form.listId} onChange={(event) => setForm((current) => ({ ...current, listId: event.target.value }))}>
+          <option value="">— Без списка</option>
           {lists.map((list) => <option key={list.id} value={list.id}>{list.icon} {list.title}</option>)}
         </select>
         <div className="date-row">
@@ -513,7 +523,7 @@ function filterNotes(notes: Note[], view: ViewId): Note[] {
   if (view === "planned") return notes.filter((note) => !note.completed && note.reminders.length > 0);
   if (view === "completed") return notes.filter((note) => note.completed);
   if (view === "all") return notes;
-  if (view.startsWith("list:")) return notes.filter((note) => note.listId === view.slice(5));
+  if (view.startsWith("list:")) return notes.filter((note) => !note.completed && note.listId === view.slice(5));
   return notes;
 }
 
