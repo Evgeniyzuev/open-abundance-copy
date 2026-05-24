@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 import { CheckCircle2, CheckSquare, FileText, Heart, Map, Sparkles, Target, TrendingUp, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import RecommendedWishes from "@/components/RecommendedWishes";
+import TasksApp from "@/components/TasksApp";
 
 type MainTabId = "goals" | "tasks" | "spark" | "wallet" | "people";
 type GoalTabId = "desires" | "notes" | "checks" | "map" | "growth";
@@ -118,6 +119,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const currentTitle = getCurrentTitle(activeMainTab, activeGoalTab);
   const showNotes = activeMainTab === "goals" && activeGoalTab === "notes";
   const showWishes = activeMainTab === "goals" && activeGoalTab === "desires";
+  const showChecks = activeMainTab === "goals" && activeGoalTab === "checks";
 
   return (
     <>
@@ -128,7 +130,8 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
       <section className="app-content">
         {showNotes ? notesSlot : null}
         {showWishes ? <RecommendedWishes refreshNonce={refreshNonce} /> : null}
-        {!showNotes && !showWishes ? <PlaceholderScreen title={currentTitle} /> : null}
+        {showChecks ? <TasksApp /> : null}
+        {!showNotes && !showWishes && !showChecks ? <PlaceholderScreen title={currentTitle} /> : null}
       </section>
       <BottomTabBar activeTab={activeMainTab} hidden={navHidden} onTabChange={setActiveMainTab} />
     </>

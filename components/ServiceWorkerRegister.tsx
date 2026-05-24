@@ -8,6 +8,18 @@ export default function ServiceWorkerRegister() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
+    const isLocalDev = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+    if (isLocalDev) {
+      navigator.serviceWorker.getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+        .then(() => caches.keys())
+        .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+        .catch((error) => {
+          console.warn("Local service worker cleanup failed", error);
+        });
+      return;
+    }
+
     let lastUpdateCheckAt = 0;
     let removeVisibilityListener: (() => void) | undefined;
 

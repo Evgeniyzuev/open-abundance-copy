@@ -135,6 +135,60 @@ h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.05; letter-spacing: 0; }
 .info-block p { margin: 0; color: var(--muted); white-space: pre-wrap; }
 .info-block span { color: var(--muted); }
 .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tasks-screen { width: min(100vw, 610px); margin: 0 auto; padding: 0 6px 20px; }
+.tasks-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 4px 14px; }
+.tasks-header span { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+.tasks-header h1 { margin: 2px 0 0; }
+.tasks-add-button { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #1f95ff; color: white; box-shadow: 0 8px 18px rgba(31, 149, 255, 0.24); }
+.task-section { display: grid; gap: 8px; margin-bottom: 18px; }
+.task-section h2 { margin: 0; padding: 0 4px; font-size: 19px; line-height: 1.2; }
+.task-section-toggle { min-height: 42px; display: flex; align-items: center; justify-content: space-between; border-radius: 12px; padding: 0 12px; background: rgba(255,255,255,0.72); color: var(--text); font-weight: 800; text-align: left; }
+.task-section-toggle strong { min-width: 28px; min-height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #eef6ff; color: var(--blue); font-size: 14px; }
+.task-empty { border-radius: 12px; padding: 18px 14px; background: rgba(255,255,255,0.62); color: var(--muted); font-size: 15px; text-align: center; }
+.task-panel-list { display: grid; gap: 6px; }
+.task-panel { min-height: 74px; display: grid; grid-template-columns: minmax(0, 1fr) 42px; align-items: stretch; overflow: hidden; border-radius: 12px; background: var(--surface); box-shadow: 0 10px 28px rgba(25,25,35,0.08); }
+.task-panel-main { min-width: 0; display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 12px; align-items: stretch; background: transparent; color: var(--text); text-align: left; }
+.task-thumb { width: 74px; min-height: 74px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; background: #eef0f5; color: var(--blue); }
+.task-thumb img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.task-panel-body { min-width: 0; display: grid; align-content: center; gap: 5px; padding: 9px 0; }
+.task-panel-title { min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 850; line-height: 1.15; }
+.task-panel-title em { flex: 0 0 auto; border-radius: 999px; padding: 4px 9px; background: #f1f2f7; color: var(--muted); font-size: 14px; font-style: normal; }
+.task-panel-body small { overflow: hidden; color: var(--muted); font-size: 13px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.task-progress { width: 100%; height: 8px; overflow: hidden; border-radius: 999px; background: #e8e8ee; }
+.task-progress span { height: 100%; display: block; border-radius: inherit; background: var(--blue); }
+.task-progress.detail { height: 10px; }
+.task-done-button { align-self: center; justify-self: center; width: 30px; height: 30px; border: 2px solid #c7c7cc; border-radius: 999px; background: transparent; color: white; font-size: 17px; font-weight: 900; }
+.task-done-button.done { border-color: var(--green); background: var(--green); }
+.task-modal { max-height: min(86vh, 780px); overflow: auto; }
+.task-modal-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.mode-button { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 999px; padding: 0 12px; background: #f1f2f7; color: var(--muted); font-weight: 800; }
+.mode-button.active { background: #eef6ff; color: var(--blue); }
+.task-image-preview { width: 88px; height: 88px; display: block; object-fit: cover; border-radius: 12px; }
+.weekday-picker { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.weekday-button { min-height: 36px; border-radius: 999px; background: #f1f2f7; color: var(--muted); font-size: 13px; font-weight: 800; }
+.weekday-button.active { background: var(--blue); color: white; }
+.duration-row { display: grid; grid-template-columns: minmax(0, 120px) minmax(0, 1fr); gap: 10px; align-items: center; }
+.duration-row label { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 750; }
+.duration-row label input { width: auto; }
+.subtask-editor { display: grid; gap: 8px; }
+.subtask-input-row { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px; }
+.subtask-input-row .secondary-button { min-height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.subtask-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.subtask-chip { min-height: 30px; border-radius: 999px; padding: 0 10px; background: #eef6ff; color: var(--blue); font-size: 13px; font-weight: 800; }
+.task-detail-modal { max-height: min(88vh, 780px); overflow: auto; padding: 0; }
+.task-detail-modal .modal-header { padding: 14px 14px 0; }
+.task-detail-image { width: 100%; aspect-ratio: 1.65; display: block; object-fit: cover; }
+.task-detail-body { display: grid; gap: 12px; padding: 14px; }
+.task-detail-body h3 { margin: 0; font-size: 25px; line-height: 1.1; }
+.task-detail-body p { margin: 0; color: var(--text); font-size: 16px; line-height: 1.38; white-space: pre-wrap; }
+.task-detail-body strong { color: var(--blue); font-size: 16px; }
+.task-detail-subtasks { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.task-detail-subtasks li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; align-items: center; color: var(--text); }
+.task-detail-subtasks svg { color: var(--blue); }
+.week-preview { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.week-preview span { aspect-ratio: 1; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #f1f2f7; color: var(--muted); font-size: 13px; font-weight: 850; }
+.week-preview span.due { background: #fff4de; color: #b26b00; }
+.week-preview span.done { background: #e7f8ed; color: var(--green); }
 @media (max-width: 620px) {
   .app-shell { padding: 0; }
   .app-content { padding-top: 78px; padding-bottom: 92px; }
@@ -144,6 +198,8 @@ h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.05; letter-spacing: 0; }
   .smart-card { min-height: 106px; padding: 13px 15px; }
   .floating-add { right: 24px; bottom: 24px; }
   .ios-list-row > button:first-child { padding: 0 18px; }
+  .tasks-screen { padding-left: 4px; padding-right: 4px; }
+  .task-panel { border-radius: 10px; }
 }
 @media (max-width: 390px) {
   .smart-card strong { font-size: 29px; }
