@@ -13,7 +13,12 @@
 - [x] Added subtasks as a local checklist inside the task.
 - [x] Split active tasks into `Today` and collapsible `Other` lists.
 - [x] Added row-style task panels with thumbnail, title, progress and quick today completion.
-- [x] Added task details modal with image, description, subtasks, progress, 14-day preview, mark-today, complete and delete actions.
+- [x] Added task details modal with image, description, subtasks, progress, 14-day preview and one primary `Done` action.
+- [x] Added local-only checkboxes for subtasks inside task details.
+- [x] Added soft delete with confirmation.
+- [x] Added completed/deleted archive screen.
+- [x] Added permanent delete from archive with confirmation.
+- [x] Added finite streak completion dialog with `Extend` / `Finish`.
 
 ### Left
 
@@ -21,12 +26,12 @@
 - [ ] Add uncomplete day / undo completion.
 - [ ] Add real streak calculation: current streak, longest streak, missed scheduled days.
 - [ ] Add full calendar view by month.
-- [ ] Add note-to-task duplication button from `Notes`.
+- [ ] After routing exists, add `Note -> New Task` flow: open the `New Task` screen prefilled from the note instead of directly cloning in place.
 - [ ] Move uploaded images into a dedicated IndexedDB image store instead of keeping compressed data in the task row.
 - [ ] Add offline action queue and Supabase sync.
 - [ ] Add Supabase Storage or external image URL strategy for synced user images.
 - [ ] Add reminders and push notifications.
-- [ ] Add completed/archived tasks section if it becomes useful.
+- [ ] Persist subtask completion state if it becomes part of progress/streak logic.
 
 ## Цель
 
@@ -61,7 +66,7 @@
 6. Нажатие на `+` открывает создание задачи.
 7. Нажатие на задачу открывает подробности.
 8. В деталях можно отметить выполнение за сегодня, увидеть историю дней и следующую неделю.
-9. Заметку из `Notes` можно одной кнопкой продублировать как задачу.
+9. После появления маршрутизации заметку из `Notes` можно будет отправить в экран `New Task` с предзаполненными title/description/reminders.
 
 ## Экран Списка
 
@@ -316,6 +321,22 @@ RLS:
 - после создания можно открыть task detail.
 
 Не надо удалять заметку автоматически.
+
+### Routing-first note-to-task flow
+
+Do not add direct in-place cloning from `Notes` yet. After routing exists, the desired flow is:
+
+1. User opens a note.
+2. User chooses `Make task`.
+3. App navigates to `New Task`.
+4. `New Task` is prefilled from the note:
+   - note title -> task title;
+   - note body -> task description;
+   - note reminders -> suggested schedule/date;
+   - source note id -> future `source_note_id`.
+5. User can adjust schedule, image, weekdays and subtasks before saving.
+
+This keeps task creation explicit and avoids silently creating tasks with the wrong schedule.
 
 ## Best Practices
 

@@ -65,4 +65,8 @@ pnpm dlx supabase db dump --db-url "<OLD_DATABASE_URL>" -f old_data.sql --data-o
 
 CSV import/export is useful for individual tables. SQL dumps are better for moving full schemas, policies, indexes, functions, triggers, and larger data sets.
 
+Local-first storage, client/server source-of-truth rules, restore behavior, and sync policy are documented in [`LOCAL_FIRST_SYNC.md`](./LOCAL_FIRST_SYNC.md).
+
+Guest-first onboarding, user identity states, profile schema, guest claim flow, and rewards planning are documented in [`USERS.md`](./USERS.md).
+
 Do not commit `.env`, database passwords, service role keys, JWT secrets, or `supabase/.temp`.
