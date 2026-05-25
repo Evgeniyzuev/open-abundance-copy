@@ -86,8 +86,13 @@ async function withStore<T>(
 }
 
 export async function getTasks(): Promise<TaskItem[]> {
+  const tasks = await getAllTasks();
+  return tasks.filter((task) => !task.deleted);
+}
+
+export async function getAllTasks(): Promise<TaskItem[]> {
   const tasks = await withStore<TaskItem[]>(TASKS_STORE, "readonly", (store) => store.getAll());
-  return tasks.map(normalizeTask).filter((task) => !task.deleted).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return tasks.map(normalizeTask).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export async function getTaskCompletions(): Promise<TaskCompletion[]> {
@@ -149,6 +154,16 @@ export async function deleteTask(id: string): Promise<void> {
   if (!task) return;
   await withStore<IDBValidKey>(TASKS_STORE, "readwrite", (store) =>
     store.put({ ...task, deleted: true, updatedAt: new Date().toISOString(), syncStatus: navigator.onLine ? "pending_sync" : "local" })
+  );
+}
+
+export async function purgeTask(id: string): Promise<void> {
+  const completions = await getTaskCompletions();
+  await withStore<undefined>(TASKS_STORE, "readwrite", (store) => store.delete(id));
+  await Promise.all(
+    completions
+      .filter((completion) => completion.taskId === id)
+      .map((completion) => withStore<undefined>(TASK_COMPLETIONS_STORE, "readwrite", (store) => store.delete(completion.id)))
   );
 }
 

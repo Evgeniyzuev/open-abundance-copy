@@ -6,8 +6,9 @@ import {
   completeTask,
   completeTaskDay,
   deleteTask,
+  getAllTasks,
   getTaskCompletions,
-  getTasks,
+  purgeTask,
   saveTask
 } from "@/lib/tasksStore";
 import type { TaskCompletion, TaskItem, TaskSchedule } from "@/lib/tasksStore";
@@ -55,12 +56,13 @@ export default function TasksApp() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [otherExpanded, setOtherExpanded] = useState(true);
+  const [archiveOpen, setArchiveOpen] = useState(false);
 
   const selectedTask = selectedTaskId ? tasks.find((task) => task.id === selectedTaskId) : undefined;
   const today = todayKey();
 
   async function refreshTasks() {
-    const [storedTasks, storedCompletions] = await Promise.all([getTasks(), getTaskCompletions()]);
+    const [storedTasks, storedCompletions] = await Promise.all([getAllTasks(), getTaskCompletions()]);
     setTasks(storedTasks);
     setCompletions(storedCompletions);
   }
@@ -70,13 +72,14 @@ export default function TasksApp() {
   }, []);
 
   const todayTasks = useMemo(
-    () => tasks.filter((task) => !task.completed && isDueOn(task, today) && !isCompletedOn(task.id, today, completions)),
+    () => tasks.filter((task) => !task.deleted && !task.completed && isDueOn(task, today) && !isCompletedOn(task.id, today, completions)),
     [completions, tasks, today]
   );
   const otherTasks = useMemo(
-    () => tasks.filter((task) => !task.completed && !todayTasks.some((todayTask) => todayTask.id === task.id)),
+    () => tasks.filter((task) => !task.deleted && !task.completed && !todayTasks.some((todayTask) => todayTask.id === task.id)),
     [tasks, todayTasks]
   );
+  const archiveTasks = useMemo(() => tasks.filter((task) => task.completed || task.deleted), [tasks]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -111,9 +114,31 @@ export default function TasksApp() {
   }
 
   async function removeTask(task: TaskItem) {
+    const confirmed = window.confirm(`Удалить задачу "${task.title}"? Она попадет в завершенные/удаленные.`);
+    if (!confirmed) return;
     await deleteTask(task.id);
     setSelectedTaskId(null);
     await refreshTasks();
+  }
+
+  async function removeTaskForever(task: TaskItem) {
+    const confirmed = window.confirm(`Удалить задачу "${task.title}" окончательно? Это действие нельзя отменить.`);
+    if (!confirmed) return;
+    await purgeTask(task.id);
+    setSelectedTaskId(null);
+    await refreshTasks();
+  }
+
+  if (archiveOpen) {
+    return (
+      <TaskArchiveScreen
+        completions={completions}
+        tasks={archiveTasks}
+        today={today}
+        onBack={() => setArchiveOpen(false)}
+        onDeleteForever={removeTaskForever}
+      />
+    );
   }
 
   return (
@@ -138,6 +163,13 @@ export default function TasksApp() {
         {otherExpanded ? (
           <TaskList emptyText="Остальных задач пока нет." tasks={otherTasks} completions={completions} today={today} onMarkToday={markToday} onOpen={setSelectedTaskId} />
         ) : null}
+      </section>
+
+      <section className="task-section">
+        <button className="task-archive-link" type="button" onClick={() => setArchiveOpen(true)}>
+          <span>Завершенные и удаленные</span>
+          <strong>{archiveTasks.length}</strong>
+        </button>
       </section>
 
       {modalOpen ? <TaskModal form={form} setForm={setForm} onClose={() => setModalOpen(false)} onSubmit={handleSubmit} /> : null}
@@ -165,6 +197,41 @@ type TaskSectionProps = {
   onMarkToday: (task: TaskItem) => void;
   onOpen: (id: string) => void;
 };
+
+type TaskArchiveScreenProps = {
+  tasks: TaskItem[];
+  completions: TaskCompletion[];
+  today: string;
+  onBack: () => void;
+  onDeleteForever: (task: TaskItem) => void;
+};
+
+function TaskArchiveScreen({ tasks, completions, today, onBack, onDeleteForever }: TaskArchiveScreenProps) {
+  return (
+    <section className="tasks-screen task-archive-screen">
+      <header className="task-archive-topbar">
+        <button className="back-button" type="button" onClick={onBack}>‹</button>
+        <h1>Завершенные и удаленные</h1>
+      </header>
+
+      {tasks.length === 0 ? (
+        <div className="task-empty">Здесь пока ничего нет.</div>
+      ) : (
+        <div className="task-panel-list">
+          {tasks.map((task) => (
+            <ArchiveTaskPanel
+              completions={completions}
+              key={task.id}
+              task={task}
+              today={today}
+              onDeleteForever={() => onDeleteForever(task)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 function TaskSection(props: TaskSectionProps) {
   return (
@@ -222,6 +289,41 @@ function TaskPanel({ task, completions, today, onMarkToday, onOpen }: TaskPanelP
           {doneToday ? "✓" : ""}
         </button>
       ) : null}
+    </article>
+  );
+}
+
+type ArchiveTaskPanelProps = {
+  task: TaskItem;
+  completions: TaskCompletion[];
+  today: string;
+  onDeleteForever: () => void;
+};
+
+function ArchiveTaskPanel({ task, completions, today, onDeleteForever }: ArchiveTaskPanelProps) {
+  const progress = getProgress(task, completions);
+  const image = task.thumbnailDataUrl || task.imageUrl;
+
+  return (
+    <article className="task-panel archive">
+      <div className="task-panel-main">
+        <span className="task-thumb">{image ? <img alt="" src={image} /> : <CheckSquare size={24} />}</span>
+        <span className="task-panel-body">
+          <span className="task-panel-title">
+            {task.title}
+            <em>{task.deleted ? "Удалено" : "Завершено"}</em>
+          </span>
+          <small>{getArchiveSubtitle(task, today, progress.label)}</small>
+          {progress.percent !== null ? (
+            <span className="task-progress">
+              <span style={{ width: `${progress.percent}%` }} />
+            </span>
+          ) : null}
+        </span>
+      </div>
+      <button className="task-forever-delete-button" type="button" aria-label="Удалить окончательно" onClick={onDeleteForever}>
+        <Trash2 size={18} />
+      </button>
     </article>
   );
 }
@@ -359,7 +461,7 @@ function TaskDetailModal({ task, completions, today, onClose, onDelete, onFinish
         <div className="modal-header">
           <button className="text-button" type="button" onClick={onClose}>Закрыть</button>
           <h2>Задача</h2>
-          <button className="text-button primary" type="button" onClick={onDelete}><Trash2 size={18} /></button>
+          <button className="text-button primary danger-icon-button" type="button" aria-label="Удалить задачу" onClick={onDelete}><Trash2 size={18} /></button>
         </div>
         {image ? <img className="task-detail-image" alt="" src={image} /> : null}
         <div className="task-detail-body">
@@ -440,6 +542,13 @@ function getProgress(task: TaskItem, completions: TaskCompletion[]): { label: st
     label: `${completedDays}/${task.schedule.targetDays}`,
     percent: Math.min(100, Math.round((completedDays / task.schedule.targetDays) * 100))
   };
+}
+
+function getArchiveSubtitle(task: TaskItem, today: string, progressLabel: string | null): string {
+  if (task.deleted) return "Можно удалить окончательно";
+  if (progressLabel) return progressLabel;
+  if (isDueOn(task, today)) return "Была запланирована на сегодня";
+  return "Задача завершена";
 }
 
 function getScheduleTypeLabel(type: ScheduleType): string {
