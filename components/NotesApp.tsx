@@ -236,6 +236,7 @@ export default function NotesApp() {
           lists={lists}
           onBack={() => setDetailView(null)}
           onCreate={openCreateNote}
+          onCreateList={() => setListModalOpen(true)}
           onComplete={completeNote}
           onEdit={openEditNote}
           onInfo={setInfoNoteId}
@@ -351,20 +352,22 @@ type ListDetailProps = {
   lists: ReminderList[];
   onBack: () => void;
   onCreate: () => void;
+  onCreateList: () => void;
   onComplete: (note: Note) => void;
   onEdit: (note: Note) => void;
   onInfo: (id: string) => void;
 };
 
-function ListDetail({ activeTitle, notes, lists, onBack, onCreate, onComplete, onEdit, onInfo }: ListDetailProps) {
+function ListDetail({ activeTitle, notes, lists, onBack, onCreate, onCreateList, onComplete, onEdit, onInfo }: ListDetailProps) {
   return (
     <section className="detail-screen">
       <header className="detail-topbar">
         <button className="back-button" type="button" onClick={onBack}>‹</button>
         <h1>{activeTitle}</h1>
-        <div className="detail-actions">
-          <button className="round-button" type="button" aria-label="Поделиться">⇧</button>
-          <button className="round-button" type="button" aria-label="Еще">•••</button>
+        <div className="top-actions">
+          <button className="round-button search-button" type="button" aria-label="Поиск">⌕</button>
+          <button className="round-button list-create-button" type="button" aria-label="Создать список" onClick={onCreateList}>▦</button>
+          <button className="round-button primary-add-button" type="button" aria-label="Создать заметку" onClick={onCreate}>+</button>
         </div>
       </header>
 
@@ -390,7 +393,6 @@ function ListDetail({ activeTitle, notes, lists, onBack, onCreate, onComplete, o
         )}
       </div>
 
-      <button className="floating-add" type="button" aria-label="Создать заметку" onClick={onCreate}>+</button>
     </section>
   );
 }
