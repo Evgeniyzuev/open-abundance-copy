@@ -191,8 +191,15 @@ h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.05; letter-spacing: 0; }
 .task-detail-body p { margin: 0; color: var(--text); font-size: 16px; line-height: 1.38; white-space: pre-wrap; }
 .task-detail-body strong { color: var(--blue); font-size: 16px; }
 .task-detail-subtasks { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.task-detail-subtasks li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; align-items: center; color: var(--text); }
-.task-detail-subtasks svg { color: var(--blue); }
+.task-detail-subtasks li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 9px; align-items: center; color: var(--text); }
+.task-detail-subtasks li.done span { color: var(--muted); text-decoration: line-through; }
+.subtask-check-button { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border: 2px solid #c7c7cc; border-radius: 999px; background: transparent; color: white; font-size: 14px; font-weight: 900; line-height: 1; }
+.task-detail-subtasks li.done .subtask-check-button { border-color: var(--green); background: var(--green); }
+.task-done-primary-button { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; border-radius: 14px; padding: 0 16px; background: var(--blue); color: white; font-weight: 900; box-shadow: 0 10px 24px rgba(10, 132, 255, 0.24); }
+.streak-complete-modal { justify-items: center; text-align: center; }
+.streak-complete-modal h2 { margin: 0; font-size: 22px; }
+.streak-complete-modal p { margin: 0; color: var(--muted); font-size: 16px; }
+.streak-complete-icon { width: 64px; height: 64px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--green); color: white; font-size: 34px; font-weight: 900; box-shadow: 0 12px 26px rgba(52, 199, 89, 0.28); }
 .week-preview { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
 .week-preview span { aspect-ratio: 1; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #f1f2f7; color: var(--muted); font-size: 13px; font-weight: 850; }
 .week-preview span.due { background: #fff4de; color: #b26b00; }

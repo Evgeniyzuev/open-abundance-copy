@@ -57,6 +57,7 @@ export default function TasksApp() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [otherExpanded, setOtherExpanded] = useState(true);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [streakDecisionTask, setStreakDecisionTask] = useState<TaskItem | null>(null);
 
   const selectedTask = selectedTaskId ? tasks.find((task) => task.id === selectedTaskId) : undefined;
   const today = todayKey();
@@ -103,13 +104,41 @@ export default function TasksApp() {
   }
 
   async function markToday(task: TaskItem) {
+    const completedBefore = completions.filter((completion) => completion.taskId === task.id).length;
     await completeTaskDay(task.id, today);
     await refreshTasks();
+
+    if (task.schedule.type === "once") {
+      setSelectedTaskId(null);
+      window.alert(`Готово: "${task.title}"`);
+      return;
+    }
+
+    if (!task.schedule.infinite && task.schedule.targetDays && completedBefore + 1 >= task.schedule.targetDays) {
+      setStreakDecisionTask(task);
+    }
   }
 
   async function finishTask(task: TaskItem) {
     await completeTask(task.id);
+    setStreakDecisionTask(null);
     setSelectedTaskId(null);
+    await refreshTasks();
+  }
+
+  async function extendTask(task: TaskItem) {
+    const schedule = extendTaskSchedule(task.schedule);
+    await saveTask({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      subtasks: task.subtasks,
+      schedule,
+      imageUrl: task.imageUrl,
+      thumbnailDataUrl: task.thumbnailDataUrl,
+      syncStatus: navigator.onLine ? "pending_sync" : "local"
+    });
+    setStreakDecisionTask(null);
     await refreshTasks();
   }
 
@@ -180,8 +209,14 @@ export default function TasksApp() {
           today={today}
           onClose={() => setSelectedTaskId(null)}
           onDelete={() => removeTask(selectedTask)}
-          onFinish={() => finishTask(selectedTask)}
-          onMarkToday={() => markToday(selectedTask)}
+          onDone={() => markToday(selectedTask)}
+        />
+      ) : null}
+      {streakDecisionTask ? (
+        <StreakCompleteModal
+          task={streakDecisionTask}
+          onExtend={() => extendTask(streakDecisionTask)}
+          onFinish={() => finishTask(streakDecisionTask)}
         />
       ) : null}
     </section>
@@ -446,14 +481,23 @@ type TaskDetailModalProps = {
   today: string;
   onClose: () => void;
   onDelete: () => void;
-  onFinish: () => void;
-  onMarkToday: () => void;
+  onDone: () => void;
 };
 
-function TaskDetailModal({ task, completions, today, onClose, onDelete, onFinish, onMarkToday }: TaskDetailModalProps) {
+function TaskDetailModal({ task, completions, today, onClose, onDelete, onDone }: TaskDetailModalProps) {
   const image = task.thumbnailDataUrl || task.imageUrl;
   const doneToday = isCompletedOn(task.id, today, completions);
   const progress = getProgress(task, completions);
+  const [checkedSubtasks, setCheckedSubtasks] = useState<Set<number>>(new Set());
+
+  function toggleSubtask(index: number) {
+    setCheckedSubtasks((current) => {
+      const next = new Set(current);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -472,8 +516,10 @@ function TaskDetailModal({ task, completions, today, onClose, onDelete, onFinish
           {task.subtasks.length > 0 ? (
             <ul className="task-detail-subtasks">
               {task.subtasks.map((subtask, index) => (
-                <li key={`${subtask}-${index}`}>
-                  <CheckSquare size={16} />
+                <li className={checkedSubtasks.has(index) ? "done" : ""} key={`${subtask}-${index}`}>
+                  <button className="subtask-check-button" type="button" aria-label="Отметить подзадачу" onClick={() => toggleSubtask(index)}>
+                    {checkedSubtasks.has(index) ? "✓" : ""}
+                  </button>
                   <span>{subtask}</span>
                 </li>
               ))}
@@ -481,9 +527,32 @@ function TaskDetailModal({ task, completions, today, onClose, onDelete, onFinish
           ) : null}
           <WeekPreview task={task} completions={completions} />
           {isDueOn(task, today) ? (
-            <button className="secondary-button" type="button" disabled={doneToday} onClick={onMarkToday}>{doneToday ? "Сегодня выполнено" : "Отметить сегодня"}</button>
+            <button className="task-done-primary-button" type="button" disabled={doneToday} onClick={onDone}>
+              {doneToday ? "Done today ✓" : "Done ✓"}
+            </button>
           ) : null}
-          <button className="secondary-button" type="button" onClick={onFinish}>Завершить задачу</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type StreakCompleteModalProps = {
+  task: TaskItem;
+  onExtend: () => void;
+  onFinish: () => void;
+};
+
+function StreakCompleteModal({ task, onExtend, onFinish }: StreakCompleteModalProps) {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal-sheet small streak-complete-modal">
+        <div className="streak-complete-icon">✓</div>
+        <h2>Стрик завершен</h2>
+        <p>{task.title}</p>
+        <div className="modal-actions">
+          <button className="secondary-button" type="button" onClick={onExtend}>Продлить</button>
+          <button className="task-done-primary-button" type="button" onClick={onFinish}>Завершить</button>
         </div>
       </div>
     </div>
@@ -515,6 +584,12 @@ function buildSchedule(form: typeof emptyTaskForm): TaskSchedule {
     return { type: "weekdays", startDate: form.startDate, weekdays: form.weekdays.length > 0 ? form.weekdays : [1], targetDays, infinite: form.infinite };
   }
   return { type: "daily", startDate: form.startDate, targetDays, infinite: form.infinite };
+}
+
+function extendTaskSchedule(schedule: TaskSchedule): TaskSchedule {
+  if (schedule.type === "once") return schedule;
+  const currentTarget = schedule.targetDays ?? 7;
+  return { ...schedule, infinite: false, targetDays: currentTarget + Math.max(1, currentTarget) };
 }
 
 function isDueOn(task: TaskItem, day: string): boolean {
