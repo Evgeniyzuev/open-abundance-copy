@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      challenges: {
+        Row: {
+          category: string
+          created_at: string
+          description: Json
+          difficulty_level: number
+          duration_days: number | null
+          id: string
+          image_url: string | null
+          instructions: Json
+          is_active: boolean
+          requirements: Json
+          reward_label: Json
+          sort_order: number
+          title: Json
+          verification_type: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          description?: Json
+          difficulty_level?: number
+          duration_days?: number | null
+          id?: string
+          image_url?: string | null
+          instructions?: Json
+          is_active?: boolean
+          requirements?: Json
+          reward_label?: Json
+          sort_order?: number
+          title?: Json
+          verification_type?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: Json
+          difficulty_level?: number
+          duration_days?: number | null
+          id?: string
+          image_url?: string | null
+          instructions?: Json
+          is_active?: boolean
+          requirements?: Json
+          reward_label?: Json
+          sort_order?: number
+          title?: Json
+          verification_type?: string
+        }
+        Relationships: []
+      }
       recommended_wishes: {
         Row: {
           category: string
@@ -185,3 +236,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

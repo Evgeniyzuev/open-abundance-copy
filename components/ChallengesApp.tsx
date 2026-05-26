@@ -1,0 +1,225 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Clock3, ShieldCheck, Trophy } from "lucide-react";
+
+type LocaleText = Record<string, string> | null;
+
+type Challenge = {
+  id: string;
+  title: LocaleText;
+  description: LocaleText;
+  instructions: LocaleText;
+  requirements: LocaleText;
+  reward_label: LocaleText;
+  category: string;
+  difficulty_level: number;
+  duration_days: number | null;
+  image_url: string | null;
+  verification_type: "auto" | "manual" | "community";
+  sort_order: number;
+};
+
+type ChallengesResponse = {
+  challenges?: Challenge[];
+  error?: string;
+};
+
+const CHALLENGES_CACHE_KEY = "open-abundance:challenges:v1";
+const LOCALE = "ru";
+
+type ChallengesAppProps = {
+  refreshNonce: number;
+};
+
+export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadChallenges() {
+      const cachedChallenges = readCachedChallenges();
+
+      if (cachedChallenges.length > 0) {
+        setChallenges(cachedChallenges);
+        setStatus("ready");
+      }
+
+      if (!navigator.onLine) {
+        setStatus(cachedChallenges.length > 0 ? "ready" : "offline");
+        return;
+      }
+
+      setIsRefreshing(cachedChallenges.length > 0);
+
+      try {
+        const response = await fetch("/api/challenges", { cache: "no-store" });
+        const payload = (await response.json()) as ChallengesResponse;
+
+        if (!response.ok || payload.error) {
+          throw new Error(payload.error ?? "Failed to load challenges.");
+        }
+
+        if (mounted) {
+          const nextChallenges = payload.challenges ?? [];
+          setChallenges(nextChallenges);
+          writeCachedChallenges(nextChallenges);
+          setStatus("ready");
+        }
+      } catch {
+        if (mounted) setStatus(cachedChallenges.length > 0 ? "ready" : "offline");
+      } finally {
+        if (mounted) setIsRefreshing(false);
+      }
+    }
+
+    loadChallenges();
+    return () => {
+      mounted = false;
+    };
+  }, [refreshNonce]);
+
+  return (
+    <section className="challenges-screen">
+      <header className="challenges-header">
+        <div>
+          <span>Challenges</span>
+          <h1>Челленджи</h1>
+        </div>
+        {isRefreshing ? <small>Обновляем...</small> : null}
+      </header>
+
+      {status === "loading" ? <ChallengeState title="Загрузка..." description="Готовим челленджи." /> : null}
+      {status === "offline" ? <ChallengeState title="Нет подключения" description="Челленджи появятся после первого онлайн-обновления." /> : null}
+
+      {challenges.length > 0 ? (
+        <div className="challenge-list">
+          {challenges.map((challenge) => (
+            <ChallengeRow challenge={challenge} key={challenge.id} onOpen={() => setSelectedChallenge(challenge)} />
+          ))}
+        </div>
+      ) : null}
+
+      {selectedChallenge ? <ChallengeDetailModal challenge={selectedChallenge} onClose={() => setSelectedChallenge(null)} /> : null}
+    </section>
+  );
+}
+
+function ChallengeRow({ challenge, onOpen }: { challenge: Challenge; onOpen: () => void }) {
+  return (
+    <button className="challenge-row" type="button" onClick={onOpen}>
+      <span className="challenge-thumb">
+        {challenge.image_url ? <img alt="" src={challenge.image_url} loading="lazy" /> : <Trophy size={24} />}
+      </span>
+      <span className="challenge-row-body">
+        <span className="challenge-row-title">
+          {text(challenge.title, "Челлендж")}
+          <em>Lvl {challenge.difficulty_level}</em>
+        </span>
+        <small>{text(challenge.description, "")}</small>
+        <span className="challenge-meta">
+          <span>{text(challenge.reward_label, "Награда")}</span>
+          {challenge.duration_days ? <span>{challenge.duration_days} дн.</span> : null}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function ChallengeDetailModal({ challenge, onClose }: { challenge: Challenge; onClose: () => void }) {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal-sheet challenge-modal">
+        <div className="modal-header">
+          <button className="text-button" type="button" onClick={onClose}>Закрыть</button>
+          <h2>Челлендж</h2>
+          <span />
+        </div>
+
+        {challenge.image_url ? <img className="challenge-modal-image" alt="" src={challenge.image_url} /> : null}
+
+        <div className="challenge-modal-body">
+          <div>
+            <strong>{challenge.category}</strong>
+            <h3>{text(challenge.title, "Челлендж")}</h3>
+            <p>{text(challenge.description, "")}</p>
+          </div>
+
+          <div className="challenge-detail-grid">
+            <span>
+              <Trophy size={17} />
+              {text(challenge.reward_label, "Награда")}
+            </span>
+            <span>
+              <ShieldCheck size={17} />
+              {getVerificationLabel(challenge.verification_type)}
+            </span>
+            {challenge.duration_days ? (
+              <span>
+                <Clock3 size={17} />
+                {challenge.duration_days} дн.
+              </span>
+            ) : null}
+          </div>
+
+          {text(challenge.requirements, "") ? (
+            <section>
+              <h4>Требования</h4>
+              <p>{text(challenge.requirements, "")}</p>
+            </section>
+          ) : null}
+
+          {text(challenge.instructions, "") ? (
+            <section>
+              <h4>Инструкция</h4>
+              <p>{text(challenge.instructions, "")}</p>
+            </section>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChallengeState({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="challenge-state">
+      <Trophy size={34} />
+      <strong>{title}</strong>
+      <p>{description}</p>
+    </div>
+  );
+}
+
+function text(value: LocaleText, fallback: string): string {
+  return value?.[LOCALE] ?? value?.en ?? fallback;
+}
+
+function getVerificationLabel(type: Challenge["verification_type"]): string {
+  if (type === "auto") return "Автопроверка";
+  if (type === "community") return "Проверка сообществом";
+  return "Ручная проверка";
+}
+
+function readCachedChallenges(): Challenge[] {
+  try {
+    const value = window.localStorage.getItem(CHALLENGES_CACHE_KEY);
+    if (!value) return [];
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? (parsed as Challenge[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedChallenges(challenges: Challenge[]) {
+  try {
+    window.localStorage.setItem(CHALLENGES_CACHE_KEY, JSON.stringify(challenges));
+  } catch {
+    // Cache is a convenience layer only.
+  }
+}

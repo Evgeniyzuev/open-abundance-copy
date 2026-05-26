@@ -1,12 +1,13 @@
 "use client";
 
 import { ReactNode, useEffect, useRef, useState } from "react";
-import { CheckCircle2, CheckSquare, FileText, Heart, Map, Sparkles, Target, TrendingUp, Users, Wallet } from "lucide-react";
+import { CheckSquare, FileText, Heart, Map, Sparkles, Target, Trophy, TrendingUp, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import ChallengesApp from "@/components/ChallengesApp";
 import RecommendedWishes from "@/components/RecommendedWishes";
 import TasksApp from "@/components/TasksApp";
 
-type MainTabId = "goals" | "tasks" | "spark" | "wallet" | "people";
+type MainTabId = "goals" | "challenges" | "spark" | "wallet" | "people";
 type GoalTabId = "desires" | "notes" | "checks" | "map" | "growth";
 
 type MainTab = {
@@ -27,7 +28,7 @@ type AppNavigationProps = {
 
 const mainTabs: MainTab[] = [
   { id: "goals", title: "Цели", icon: Target },
-  { id: "tasks", title: "Задачи", icon: CheckCircle2 },
+  { id: "challenges", title: "Challenges", icon: Trophy },
   { id: "spark", title: "Идеи", icon: Sparkles },
   { id: "wallet", title: "Кошелек", icon: Wallet },
   { id: "people", title: "Люди", icon: Users }
@@ -120,6 +121,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const showNotes = activeMainTab === "goals" && activeGoalTab === "notes";
   const showWishes = activeMainTab === "goals" && activeGoalTab === "desires";
   const showChecks = activeMainTab === "goals" && activeGoalTab === "checks";
+  const showChallenges = activeMainTab === "challenges";
 
   return (
     <>
@@ -131,7 +133,8 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
         {showNotes ? notesSlot : null}
         {showWishes ? <RecommendedWishes refreshNonce={refreshNonce} /> : null}
         {showChecks ? <TasksApp /> : null}
-        {!showNotes && !showWishes && !showChecks ? <PlaceholderScreen title={currentTitle} /> : null}
+        {showChallenges ? <ChallengesApp refreshNonce={refreshNonce} /> : null}
+        {!showNotes && !showWishes && !showChecks && !showChallenges ? <PlaceholderScreen title={currentTitle} /> : null}
       </section>
       <BottomTabBar activeTab={activeMainTab} hidden={navHidden} onTabChange={setActiveMainTab} />
     </>
@@ -226,3 +229,4 @@ function getCurrentTitle(mainTab: MainTabId, goalTab: GoalTabId): string {
   if (mainTab !== "goals") return getMainTabTitle(mainTab);
   return goalTabs.find((item) => item.id === goalTab)?.title ?? "Цели";
 }
+
