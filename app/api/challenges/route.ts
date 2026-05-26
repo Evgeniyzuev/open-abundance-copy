@@ -19,7 +19,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("challenges")
-    .select("id,title,description,instructions,requirements,reward_label,category,difficulty_level,duration_days,image_url,verification_type,sort_order")
+    .select("id,title,description,instructions,requirements,reward_label,category,difficulty_level,duration_days,image_url,verification_type,verification_logic,sort_order")
     .eq("is_active", true)
     .order("sort_order", { ascending: true })
     .order("difficulty_level", { ascending: true });

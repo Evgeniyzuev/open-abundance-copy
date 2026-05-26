@@ -17,6 +17,7 @@ type Challenge = {
   duration_days: number | null;
   image_url: string | null;
   verification_type: "auto" | "manual" | "community";
+  verification_logic: string | null;
   sort_order: number;
 };
 
@@ -25,8 +26,9 @@ type ChallengesResponse = {
   error?: string;
 };
 
-const CHALLENGES_CACHE_KEY = "open-abundance:challenges:v1";
+const CHALLENGES_CACHE_KEY = "open-abundance:challenges:v2";
 const LOCALE = "ru";
+const USER_LEVEL = 0;
 
 type ChallengesAppProps = {
   refreshNonce: number;
@@ -99,7 +101,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       {challenges.length > 0 ? (
         <div className="challenge-list">
           {challenges.map((challenge) => (
-            <ChallengeRow challenge={challenge} key={challenge.id} onOpen={() => setSelectedChallenge(challenge)} />
+            <ChallengeRow challenge={challenge} key={challenge.id} userLevel={USER_LEVEL} onOpen={() => setSelectedChallenge(challenge)} />
           ))}
         </div>
       ) : null}
@@ -109,9 +111,11 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   );
 }
 
-function ChallengeRow({ challenge, onOpen }: { challenge: Challenge; onOpen: () => void }) {
+function ChallengeRow({ challenge, userLevel, onOpen }: { challenge: Challenge; userLevel: number; onOpen: () => void }) {
+  const locked = challenge.difficulty_level > userLevel;
+
   return (
-    <button className="challenge-row" type="button" onClick={onOpen}>
+    <button className={locked ? "challenge-row locked" : "challenge-row"} type="button" onClick={onOpen}>
       <span className="challenge-thumb">
         {challenge.image_url ? <img alt="" src={challenge.image_url} loading="lazy" /> : <Trophy size={24} />}
       </span>
@@ -119,10 +123,11 @@ function ChallengeRow({ challenge, onOpen }: { challenge: Challenge; onOpen: () 
         <span className="challenge-row-title">
           {text(challenge.title, "Челлендж")}
           <em>Lvl {challenge.difficulty_level}</em>
+          {locked ? <em>Locked</em> : null}
         </span>
         <small>{text(challenge.description, "")}</small>
         <span className="challenge-meta">
-          <span>{text(challenge.reward_label, "Награда")}</span>
+          <span>{rewardText(challenge.reward_label)}</span>
           {challenge.duration_days ? <span>{challenge.duration_days} дн.</span> : null}
         </span>
       </span>
@@ -131,6 +136,8 @@ function ChallengeRow({ challenge, onOpen }: { challenge: Challenge; onOpen: () 
 }
 
 function ChallengeDetailModal({ challenge, onClose }: { challenge: Challenge; onClose: () => void }) {
+  const locked = challenge.difficulty_level > USER_LEVEL;
+
   return (
     <div className="modal-backdrop" role="presentation">
       <div className="modal-sheet challenge-modal">
@@ -152,7 +159,7 @@ function ChallengeDetailModal({ challenge, onClose }: { challenge: Challenge; on
           <div className="challenge-detail-grid">
             <span>
               <Trophy size={17} />
-              {text(challenge.reward_label, "Награда")}
+              {rewardText(challenge.reward_label)}
             </span>
             <span>
               <ShieldCheck size={17} />
@@ -179,6 +186,10 @@ function ChallengeDetailModal({ challenge, onClose }: { challenge: Challenge; on
               <p>{text(challenge.instructions, "")}</p>
             </section>
           ) : null}
+
+          <div className={locked ? "challenge-access locked" : "challenge-access"}>
+            {locked ? `Доступно с уровня ${challenge.difficulty_level}` : "Доступно на вашем уровне"}
+          </div>
         </div>
       </div>
     </div>
@@ -197,6 +208,12 @@ function ChallengeState({ title, description }: { title: string; description: st
 
 function text(value: LocaleText, fallback: string): string {
   return value?.[LOCALE] ?? value?.en ?? fallback;
+}
+
+function rewardText(value: LocaleText): string {
+  const raw = text(value, "⚛️+1$").trim();
+  const amount = raw.match(/(\d+)\s*\$/)?.[1] ?? raw.match(/\+(\d+)/)?.[1];
+  return amount ? `⚛️+${amount}$` : "⚛️+1$";
 }
 
 function getVerificationLabel(type: Challenge["verification_type"]): string {

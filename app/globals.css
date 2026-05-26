@@ -66,6 +66,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .challenges-header small { color: var(--muted); font-size: 12px; font-weight: 800; }
 .challenge-list { display: grid; gap: 7px; }
 .challenge-row { min-height: 82px; display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 12px; overflow: hidden; border-radius: 12px; background: rgba(255,255,255,0.88); color: var(--text); text-align: left; box-shadow: 0 10px 28px rgba(25,25,35,0.08); }
+.challenge-row.locked { opacity: 0.62; }
 .challenge-thumb { width: 82px; min-height: 82px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; background: #fff3df; color: #c66a00; }
 .challenge-thumb img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .challenge-row-body { min-width: 0; display: grid; align-content: center; gap: 5px; padding: 10px 12px 10px 0; }
@@ -89,6 +90,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .challenge-detail-grid { display: grid; gap: 8px; }
 .challenge-detail-grid span { min-height: 38px; display: flex; align-items: center; gap: 8px; border-radius: 12px; padding: 0 12px; background: #f8f8fb; color: var(--text); font-size: 14px; font-weight: 800; }
 .challenge-detail-grid svg { color: var(--blue); }
+.challenge-access { min-height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: #eef6ff; color: var(--blue); font-weight: 900; }
+.challenge-access.locked { background: #f1f2f7; color: var(--muted); }
 .reminders-app { position: relative; max-width: 610px; min-height: calc(100vh - 40px); margin: 0 auto; padding-bottom: 88px; }
 .home-topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 52px; }
 .status-line { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; }

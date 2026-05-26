@@ -29,6 +29,7 @@ export type Database = {
           reward_label: Json
           sort_order: number
           title: Json
+          verification_logic: string | null
           verification_type: string
         }
         Insert: {
@@ -45,6 +46,7 @@ export type Database = {
           reward_label?: Json
           sort_order?: number
           title?: Json
+          verification_logic?: string | null
           verification_type?: string
         }
         Update: {
@@ -61,6 +63,7 @@ export type Database = {
           reward_label?: Json
           sort_order?: number
           title?: Json
+          verification_logic?: string | null
           verification_type?: string
         }
         Relationships: []

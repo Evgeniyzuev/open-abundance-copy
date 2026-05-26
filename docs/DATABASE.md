@@ -69,4 +69,6 @@ Local-first storage, client/server source-of-truth rules, restore behavior, and 
 
 Guest-first onboarding, user identity states, profile schema, guest claim flow, and rewards planning are documented in [`USERS.md`](./USERS.md).
 
+General development rules, including UTF-8/PowerShell safety, are documented in [`DEVELOPMENT_RULES.md`](./DEVELOPMENT_RULES.md).
+
 Do not commit `.env`, database passwords, service role keys, JWT secrets, or `supabase/.temp`.
