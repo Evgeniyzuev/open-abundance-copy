@@ -67,21 +67,20 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .challenge-section { display: grid; gap: 8px; margin: 0 0 16px; }
 .challenge-section h2 { margin: 0 4px; color: var(--muted); font-size: 13px; font-weight: 900; text-transform: uppercase; }
 .challenge-list { display: grid; gap: 7px; }
-.challenge-row { min-height: 82px; display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 12px; overflow: hidden; border-radius: 12px; background: rgba(255,255,255,0.88); color: var(--text); text-align: left; box-shadow: 0 10px 28px rgba(25,25,35,0.08); }
+.challenge-row { height: 82px; display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 12px; overflow: hidden; border-radius: 12px; background: rgba(255,255,255,0.88); color: var(--text); text-align: left; box-shadow: 0 10px 28px rgba(25,25,35,0.08); }
 .challenge-row.locked { opacity: 0.62; }
-.challenge-thumb { width: 82px; min-height: 82px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; background: #fff3df; color: #c66a00; }
+.challenge-thumb { width: 82px; height: 82px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; background: #fff3df; color: #c66a00; }
 .challenge-thumb img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .challenge-row-body { min-width: 0; display: grid; align-content: center; gap: 5px; padding: 10px 12px 10px 0; }
-.challenge-row-title { min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 850; line-height: 1.15; }
-.challenge-row-title em { flex: 0 0 auto; border-radius: 999px; padding: 4px 8px; background: #fff3df; color: #b86200; font-size: 13px; font-style: normal; }
+.challenge-row-title { min-width: 0; display: block; overflow: hidden; font-size: 18px; font-weight: 850; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .challenge-row-body small { overflow: hidden; color: var(--muted); font-size: 13px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
-.challenge-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.challenge-meta { display: flex; flex-wrap: nowrap; gap: 6px; overflow: hidden; }
 .challenge-meta span { min-height: 24px; display: inline-flex; align-items: center; border-radius: 999px; padding: 0 8px; background: #eef6ff; color: var(--blue); font-size: 12px; font-weight: 800; }
 .challenge-state { min-height: 280px; display: grid; place-items: center; align-content: center; gap: 8px; padding: 28px; color: var(--muted); text-align: center; }
 .challenge-state svg { color: #c66a00; }
 .challenge-state strong { color: var(--text); font-size: 20px; }
 .challenge-state p { max-width: 310px; margin: 0; font-size: 15px; line-height: 1.42; }
-.challenge-modal { overflow: hidden; padding: 0; }
+.challenge-modal { max-height: calc(100dvh - 36px); overflow: auto; overscroll-behavior: contain; padding: 0; }
 .challenge-modal .modal-header { padding: 14px 14px 0; }
 .challenge-modal-image { width: 100%; aspect-ratio: 1.55; display: block; object-fit: cover; }
 .challenge-modal-body { display: grid; gap: 14px; padding: 14px; }
@@ -145,7 +144,7 @@ h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.05; letter-spacing: 0; }
 .task-text i { color: var(--muted); font-size: 13px; font-style: normal; }
 .info-button { width: 30px; height: 30px; border-radius: 999px; background: #e9e9ee; color: var(--blue); font-size: 18px; font-weight: 900; opacity: 0.9; }
 .empty-state { margin-top: 20px; padding: 24px; border-radius: 16px; background: var(--surface); color: var(--muted); text-align: center; box-shadow: var(--shadow); }
-.modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: end center; padding: 18px; background: rgba(20, 20, 30, 0.24); backdrop-filter: blur(8px); }
+.modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: end center; overflow-y: auto; overscroll-behavior: contain; padding: 18px; background: rgba(20, 20, 30, 0.24); backdrop-filter: blur(8px); }
 .modal-sheet { width: min(100%, 560px); display: grid; gap: 12px; padding: 14px; border-radius: 20px; background: var(--surface); box-shadow: 0 28px 80px rgba(0,0,0,0.24); }
 .modal-sheet.small { max-width: 430px; }
 .modal-header { display: grid; grid-template-columns: 76px minmax(0, 1fr) 76px; align-items: center; gap: 8px; }

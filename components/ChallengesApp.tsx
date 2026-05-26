@@ -42,6 +42,17 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
+    if (!selectedChallenge) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [selectedChallenge]);
+
+  useEffect(() => {
     let mounted = true;
 
     async function loadChallenges() {
@@ -148,12 +159,11 @@ function ChallengeRow({ challenge, userLevel, onOpen }: { challenge: Challenge; 
       <span className="challenge-row-body">
         <span className="challenge-row-title">
           {text(challenge.title, "Челлендж")}
-          <em>Lvl {challenge.difficulty_level}</em>
-          {locked ? <em>Locked</em> : null}
         </span>
         <small>{text(challenge.description, "")}</small>
         <span className="challenge-meta">
           <span>{rewardText(challenge.reward_label)}</span>
+          <span>Lvl {challenge.difficulty_level}</span>
           {challenge.duration_days ? <span>{challenge.duration_days} дн.</span> : null}
         </span>
       </span>

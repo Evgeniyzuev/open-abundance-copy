@@ -28,5 +28,12 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ challenges: data });
+  return NextResponse.json(
+    { challenges: data },
+    {
+      headers: {
+        "Cache-Control": "no-store"
+      }
+    }
+  );
 }
