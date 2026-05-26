@@ -26,7 +26,7 @@ type ChallengesResponse = {
   error?: string;
 };
 
-const CHALLENGES_CACHE_KEY = "open-abundance:challenges:v2";
+const ACCEPTED_CHALLENGES_CACHE_KEY = "open-abundance:accepted-challenges:v1";
 const LOCALE = "ru";
 const USER_LEVEL = 0;
 
@@ -35,7 +35,8 @@ type ChallengesAppProps = {
 };
 
 export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
-  const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [acceptedChallenges, setAcceptedChallenges] = useState<Challenge[]>([]);
+  const [availableChallenges, setAvailableChallenges] = useState<Challenge[]>([]);
   const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -44,19 +45,20 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     let mounted = true;
 
     async function loadChallenges() {
-      const cachedChallenges = readCachedChallenges();
+      const cachedAcceptedChallenges = readCachedAcceptedChallenges();
 
-      if (cachedChallenges.length > 0) {
-        setChallenges(cachedChallenges);
+      if (cachedAcceptedChallenges.length > 0) {
+        setAcceptedChallenges(cachedAcceptedChallenges);
         setStatus("ready");
       }
 
       if (!navigator.onLine) {
-        setStatus(cachedChallenges.length > 0 ? "ready" : "offline");
+        setAvailableChallenges([]);
+        setStatus(cachedAcceptedChallenges.length > 0 ? "ready" : "offline");
         return;
       }
 
-      setIsRefreshing(cachedChallenges.length > 0);
+      setIsRefreshing(cachedAcceptedChallenges.length > 0);
 
       try {
         const response = await fetch("/api/challenges", { cache: "no-store" });
@@ -68,12 +70,15 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
 
         if (mounted) {
           const nextChallenges = payload.challenges ?? [];
-          setChallenges(nextChallenges);
-          writeCachedChallenges(nextChallenges);
+          const acceptedIds = new Set(cachedAcceptedChallenges.map((challenge) => challenge.id));
+          setAvailableChallenges(nextChallenges.filter((challenge) => !acceptedIds.has(challenge.id)));
           setStatus("ready");
         }
       } catch {
-        if (mounted) setStatus(cachedChallenges.length > 0 ? "ready" : "offline");
+        if (mounted) {
+          setAvailableChallenges([]);
+          setStatus(cachedAcceptedChallenges.length > 0 ? "ready" : "offline");
+        }
       } finally {
         if (mounted) setIsRefreshing(false);
       }
@@ -96,17 +101,38 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       </header>
 
       {status === "loading" ? <ChallengeState title="Загрузка..." description="Готовим челленджи." /> : null}
-      {status === "offline" ? <ChallengeState title="Нет подключения" description="Челленджи появятся после первого онлайн-обновления." /> : null}
+      {status === "offline" ? <ChallengeState title="Нет подключения" description="Доступные челленджи видны только онлайн. Принятые появятся здесь после синхронизации." /> : null}
 
-      {challenges.length > 0 ? (
-        <div className="challenge-list">
-          {challenges.map((challenge) => (
-            <ChallengeRow challenge={challenge} key={challenge.id} userLevel={USER_LEVEL} onOpen={() => setSelectedChallenge(challenge)} />
-          ))}
-        </div>
+      {acceptedChallenges.length > 0 ? (
+        <ChallengeSection
+          challenges={acceptedChallenges}
+          title="Принятые"
+          onOpen={(challenge) => setSelectedChallenge(challenge)}
+        />
+      ) : null}
+
+      {availableChallenges.length > 0 ? (
+        <ChallengeSection
+          challenges={availableChallenges}
+          title="Доступные"
+          onOpen={(challenge) => setSelectedChallenge(challenge)}
+        />
       ) : null}
 
       {selectedChallenge ? <ChallengeDetailModal challenge={selectedChallenge} onClose={() => setSelectedChallenge(null)} /> : null}
+    </section>
+  );
+}
+
+function ChallengeSection({ challenges, title, onOpen }: { challenges: Challenge[]; title: string; onOpen: (challenge: Challenge) => void }) {
+  return (
+    <section className="challenge-section">
+      <h2>{title}</h2>
+      <div className="challenge-list">
+        {challenges.map((challenge) => (
+          <ChallengeRow challenge={challenge} key={challenge.id} userLevel={USER_LEVEL} onOpen={() => onOpen(challenge)} />
+        ))}
+      </div>
     </section>
   );
 }
@@ -222,21 +248,13 @@ function getVerificationLabel(type: Challenge["verification_type"]): string {
   return "Ручная проверка";
 }
 
-function readCachedChallenges(): Challenge[] {
+function readCachedAcceptedChallenges(): Challenge[] {
   try {
-    const value = window.localStorage.getItem(CHALLENGES_CACHE_KEY);
+    const value = window.localStorage.getItem(ACCEPTED_CHALLENGES_CACHE_KEY);
     if (!value) return [];
     const parsed = JSON.parse(value) as unknown;
     return Array.isArray(parsed) ? (parsed as Challenge[]) : [];
   } catch {
     return [];
-  }
-}
-
-function writeCachedChallenges(challenges: Challenge[]) {
-  try {
-    window.localStorage.setItem(CHALLENGES_CACHE_KEY, JSON.stringify(challenges));
-  } catch {
-    // Cache is a convenience layer only.
   }
 }

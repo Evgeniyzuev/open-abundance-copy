@@ -64,6 +64,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .challenges-header span { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
 .challenges-header h1 { margin: 2px 0 0; }
 .challenges-header small { color: var(--muted); font-size: 12px; font-weight: 800; }
+.challenge-section { display: grid; gap: 8px; margin: 0 0 16px; }
+.challenge-section h2 { margin: 0 4px; color: var(--muted); font-size: 13px; font-weight: 900; text-transform: uppercase; }
 .challenge-list { display: grid; gap: 7px; }
 .challenge-row { min-height: 82px; display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 12px; overflow: hidden; border-radius: 12px; background: rgba(255,255,255,0.88); color: var(--text); text-align: left; box-shadow: 0 10px 28px rgba(25,25,35,0.08); }
 .challenge-row.locked { opacity: 0.62; }
