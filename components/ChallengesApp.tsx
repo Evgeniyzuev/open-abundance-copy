@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Clock3, ShieldCheck, Trophy } from "lucide-react";
 
 type LocaleText = Record<string, string> | null;
+type RewardLabel = LocaleText | string | number | null;
 
 type Challenge = {
   id: string;
@@ -11,7 +12,7 @@ type Challenge = {
   description: LocaleText;
   instructions: LocaleText;
   requirements: LocaleText;
-  reward_label: LocaleText;
+  reward_label: RewardLabel;
   category: string;
   difficulty_level: number;
   duration_days: number | null;
@@ -82,6 +83,13 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
         if (mounted) {
           const nextChallenges = payload.challenges ?? [];
           const acceptedIds = new Set(cachedAcceptedChallenges.map((challenge) => challenge.id));
+          const syncedAcceptedChallenges = cachedAcceptedChallenges.map((cachedChallenge) => {
+            const freshChallenge = nextChallenges.find((challenge) => challenge.id === cachedChallenge.id);
+            return freshChallenge ?? cachedChallenge;
+          });
+
+          setAcceptedChallenges(syncedAcceptedChallenges);
+          writeCachedAcceptedChallenges(syncedAcceptedChallenges);
           setAvailableChallenges(nextChallenges.filter((challenge) => !acceptedIds.has(challenge.id)));
           setStatus("ready");
         }
@@ -246,10 +254,10 @@ function text(value: LocaleText, fallback: string): string {
   return value?.[LOCALE] ?? value?.en ?? fallback;
 }
 
-function rewardText(value: LocaleText): string {
-  const raw = text(value, "⚛️+1$").trim();
-  const amount = raw.match(/(\d+)\s*\$/)?.[1] ?? raw.match(/\+(\d+)/)?.[1];
-  return amount ? `⚛️+${amount}$` : "⚛️+1$";
+function rewardText(value: RewardLabel): string {
+  const raw = rewardLabelText(value).trim();
+  const amount = raw.match(/(\d+(?:[.,]\d+)?)\s*\$/)?.[1] ?? raw.match(/\+(\d+(?:[.,]\d+)?)/)?.[1] ?? raw.match(/(\d+(?:[.,]\d+)?)/)?.[1];
+  return amount ? `⚛️${amount.replace(",", ".")}$` : "⚛️1$";
 }
 
 function getVerificationLabel(type: Challenge["verification_type"]): string {
@@ -267,4 +275,18 @@ function readCachedAcceptedChallenges(): Challenge[] {
   } catch {
     return [];
   }
+}
+
+function writeCachedAcceptedChallenges(challenges: Challenge[]) {
+  try {
+    window.localStorage.setItem(ACCEPTED_CHALLENGES_CACHE_KEY, JSON.stringify(challenges));
+  } catch {
+    // Accepted challenges remain usable even when local cache writes fail.
+  }
+}
+
+function rewardLabelText(value: RewardLabel): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return text(value, "⚛️1$");
 }
