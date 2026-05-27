@@ -126,6 +126,10 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .profile-panel strong { font-size: 24px; line-height: 1.15; }
 .profile-facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 4px; }
 .profile-facts span { min-height: 28px; display: inline-flex; align-items: center; border-radius: 999px; padding: 0 10px; background: #eef6ff; color: var(--blue); font-size: 12px; font-weight: 850; }
+.level-up-modal { justify-items: center; text-align: center; }
+.level-up-modal h2 { margin: 0; font-size: 22px; }
+.level-up-modal p { margin: 0; color: var(--muted); font-size: 16px; line-height: 1.35; }
+.level-up-badge { min-width: 78px; min-height: 78px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--blue); color: white; font-size: 20px; font-weight: 950; box-shadow: 0 12px 26px rgba(10, 132, 255, 0.28); }
 .spin { animation: spin 900ms linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .reminders-app { position: relative; max-width: 610px; min-height: calc(100vh - 40px); margin: 0 auto; padding-bottom: 88px; }

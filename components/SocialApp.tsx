@@ -46,6 +46,7 @@ export default function SocialApp({ refreshNonce }: { refreshNonce: number }) {
           <strong>{displayName}</strong>
           <p>{handle}</p>
           <div className="profile-facts">
+            <span>Lvl {profile?.level ?? 0}</span>
             <span>Профиль создан {profile ? formatDate(profile.created_at) : "..."}</span>
             <span>{profile?.default_locale ?? "ru"}</span>
           </div>

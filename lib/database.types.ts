@@ -72,6 +72,7 @@ export type Database = {
         Row: {
           balance: number
           created_at: string
+          last_seen_level: number
           level: number
           reinvest_percent: number
           updated_at: string
@@ -80,6 +81,7 @@ export type Database = {
         Insert: {
           balance?: number
           created_at?: string
+          last_seen_level?: number
           level?: number
           reinvest_percent?: number
           updated_at?: string
@@ -88,10 +90,32 @@ export type Database = {
         Update: {
           balance?: number
           created_at?: string
+          last_seen_level?: number
           level?: number
           reinvest_percent?: number
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      level_thresholds: {
+        Row: {
+          core_required: number
+          created_at: string
+          level: number
+          title: string | null
+        }
+        Insert: {
+          core_required: number
+          created_at?: string
+          level: number
+          title?: string | null
+        }
+        Update: {
+          core_required?: number
+          created_at?: string
+          level?: number
+          title?: string | null
         }
         Relationships: []
       }
@@ -172,6 +196,7 @@ export type Database = {
           display_name: string | null
           first_name: string | null
           last_name: string | null
+          level: number
           onboarding_state: Json
           phone_verified_at: string | null
           timezone: string | null
@@ -187,6 +212,7 @@ export type Database = {
           display_name?: string | null
           first_name?: string | null
           last_name?: string | null
+          level?: number
           onboarding_state?: Json
           phone_verified_at?: string | null
           timezone?: string | null
@@ -202,6 +228,7 @@ export type Database = {
           display_name?: string | null
           first_name?: string | null
           last_name?: string | null
+          level?: number
           onboarding_state?: Json
           phone_verified_at?: string | null
           timezone?: string | null
@@ -240,6 +267,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_core_level: { Args: { core_balance: number }; Returns: number }
       complete_user_challenge: {
         Args: {
           p_challenge_id: string

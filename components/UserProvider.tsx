@@ -31,6 +31,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingLevelUps, setPendingLevelUps] = useState<number[]>([]);
+  const [acknowledgingLevel, setAcknowledgingLevel] = useState(false);
 
   const refreshUserData = useCallback(async () => {
     const supabase = getBrowserSupabaseClient();
@@ -131,6 +133,53 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshUserData]);
 
+  useEffect(() => {
+    if (!core || core.level <= core.last_seen_level) {
+      setPendingLevelUps([]);
+      return;
+    }
+
+    const levels = Array.from({ length: core.level - core.last_seen_level }, (_, index) => core.last_seen_level + index + 1);
+    setPendingLevelUps(levels);
+  }, [core]);
+
+  async function acknowledgeLevelUp(level: number) {
+    const supabase = getBrowserSupabaseClient();
+    setAcknowledgingLevel(true);
+    setError(null);
+
+    try {
+      const {
+        data: { session },
+        error: sessionError
+      } = await supabase.auth.getSession();
+
+      if (sessionError) throw sessionError;
+      if (!session?.access_token) throw new Error("Supabase session is missing.");
+
+      const response = await fetch("/api/core/level-seen", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ level })
+      });
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error ?? "Failed to mark level as seen.");
+      }
+
+      setPendingLevelUps((levels) => levels.filter((item) => item > level));
+      await refreshUserData();
+    } catch (levelError) {
+      setError(levelError instanceof Error ? levelError.message : "Failed to mark level as seen.");
+    } finally {
+      setAcknowledgingLevel(false);
+    }
+  }
+
   const value = useMemo(
     () => ({
       user,
@@ -145,11 +194,37 @@ export function UserProvider({ children }: { children: ReactNode }) {
     [core, error, loading, profile, refreshUserData, refreshing, user, wallet]
   );
 
-  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
+  return (
+    <UserContext.Provider value={value}>
+      {children}
+      {pendingLevelUps[0] ? (
+        <LevelUpModal
+          level={pendingLevelUps[0]}
+          disabled={acknowledgingLevel}
+          onClose={() => acknowledgeLevelUp(pendingLevelUps[0])}
+        />
+      ) : null}
+    </UserContext.Provider>
+  );
 }
 
 export function useUserContext(): UserContextValue {
   const value = useContext(UserContext);
   if (!value) throw new Error("useUserContext must be used inside UserProvider.");
   return value;
+}
+
+function LevelUpModal({ level, disabled, onClose }: { level: number; disabled: boolean; onClose: () => void }) {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal-sheet small level-up-modal">
+        <span className="level-up-badge">Lvl {level}</span>
+        <h2>Новый уровень</h2>
+        <p>Ваш Core достиг порога уровня {level}. Открываются новые возможности и челленджи.</p>
+        <button className="challenge-primary-action" type="button" disabled={disabled} onClick={onClose}>
+          {disabled ? "Сохраняем..." : "Отлично"}
+        </button>
+      </div>
+    </div>
+  );
 }
