@@ -266,6 +266,11 @@ Rewards should generally be written by server-side code or controlled database f
    - If authenticated server data exists and local data is missing, offer restore.
    - Do not silently overwrite local data.
 
+9. Add financial ledger.
+   - Store every Core and Wallet balance change as a server-authoritative financial operation.
+   - Keep challenge progress separate from financial operation history.
+   - Use ledger/event rows for reward payouts, transfers, reversals and future audits.
+
 10. Add account/storage settings.
     - show guest/registered state;
     - show storage usage;

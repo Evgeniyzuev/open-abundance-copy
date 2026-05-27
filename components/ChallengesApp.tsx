@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Clock3, ShieldCheck, Trophy } from "lucide-react";
 import { getOrCreateLocalGuest } from "@/lib/guestIdentity";
-import { signInWithGoogle } from "@/lib/supabaseClient";
+import { getBrowserSupabaseClient, signInWithGoogle } from "@/lib/supabaseClient";
 import { useUserContext } from "@/components/UserProvider";
 
 type LocaleText = Record<string, string> | null;
 type RewardLabel = LocaleText | string | number | null;
+type ChallengeStatus = "accepted" | "completed" | "declined" | "failed";
 
 type Challenge = {
   id: string;
@@ -23,10 +24,21 @@ type Challenge = {
   verification_type: "auto" | "manual" | "community";
   verification_logic: string | null;
   sort_order: number;
+  user_challenge_status?: ChallengeStatus | null;
 };
 
 type ChallengesResponse = {
   challenges?: Challenge[];
+  error?: string;
+};
+
+type CheckChallengeResponse = {
+  status?: ChallengeStatus;
+  completed?: boolean;
+  message?: string;
+  rewardAmount?: number;
+  rewardAccount?: string;
+  rewardClaimed?: boolean;
   error?: string;
 };
 
@@ -42,12 +54,13 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   const [acceptedChallenges, setAcceptedChallenges] = useState<Challenge[]>([]);
   const [availableChallenges, setAvailableChallenges] = useState<Challenge[]>([]);
   const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
+  const [completionReward, setCompletionReward] = useState<{ amount: number; account: string; claimed: boolean } | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const { user } = useUserContext();
+  const { user, refreshUserData } = useUserContext();
 
   useEffect(() => {
-    if (!selectedChallenge) return;
+    if (!selectedChallenge && !completionReward) return;
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -55,7 +68,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [selectedChallenge]);
+  }, [completionReward, selectedChallenge]);
 
   useEffect(() => {
     let mounted = true;
@@ -77,7 +90,14 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       setIsRefreshing(cachedAcceptedChallenges.length > 0);
 
       try {
-        const response = await fetch("/api/challenges", { cache: "no-store" });
+        const supabase = getBrowserSupabaseClient();
+        const {
+          data: { session }
+        } = await supabase.auth.getSession();
+        const response = await fetch("/api/challenges", {
+          cache: "no-store",
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined
+        });
         const payload = (await response.json()) as ChallengesResponse;
 
         if (!response.ok || payload.error) {
@@ -86,10 +106,12 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
 
         if (mounted) {
           const nextChallenges = payload.challenges ?? [];
-          const acceptedIds = new Set(cachedAcceptedChallenges.map((challenge) => challenge.id));
-          const syncedAcceptedChallenges = cachedAcceptedChallenges.map((cachedChallenge) => {
+          const serverAcceptedChallenges = nextChallenges.filter((challenge) => Boolean(challenge.user_challenge_status));
+          const mergedAcceptedChallenges = mergeChallengeLists(cachedAcceptedChallenges, serverAcceptedChallenges);
+          const acceptedIds = new Set(mergedAcceptedChallenges.map((challenge) => challenge.id));
+          const syncedAcceptedChallenges = mergedAcceptedChallenges.map((cachedChallenge) => {
             const freshChallenge = nextChallenges.find((challenge) => challenge.id === cachedChallenge.id);
-            return freshChallenge ?? cachedChallenge;
+            return freshChallenge ? { ...cachedChallenge, ...freshChallenge } : cachedChallenge;
           });
 
           setAcceptedChallenges(syncedAcceptedChallenges);
@@ -111,7 +133,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     return () => {
       mounted = false;
     };
-  }, [refreshNonce]);
+  }, [refreshNonce, user]);
 
   function acceptChallenge(challenge: Challenge) {
     const nextAcceptedChallenges = mergeAcceptedChallenges(acceptedChallenges, challenge);
@@ -119,6 +141,21 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     setAvailableChallenges((challenges) => challenges.filter((item) => item.id !== challenge.id));
     writeCachedAcceptedChallenges(nextAcceptedChallenges);
     setSelectedChallenge(null);
+  }
+
+  function completeChallenge(challenge: Challenge, reward: { amount: number; account: string; claimed: boolean }) {
+    const completedChallenge: Challenge = {
+      ...challenge,
+      user_challenge_status: "completed"
+    };
+    const nextAcceptedChallenges = mergeAcceptedChallenges(acceptedChallenges, completedChallenge).map((item) =>
+      item.id === completedChallenge.id ? completedChallenge : item
+    );
+    setAcceptedChallenges(nextAcceptedChallenges);
+    setAvailableChallenges((challenges) => challenges.filter((item) => item.id !== challenge.id));
+    writeCachedAcceptedChallenges(nextAcceptedChallenges);
+    setSelectedChallenge(completedChallenge);
+    setCompletionReward(reward);
   }
 
   return (
@@ -135,19 +172,11 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       {status === "offline" ? <ChallengeState title="Нет подключения" description="Доступные челленджи видны только онлайн. Принятые появятся здесь после синхронизации." /> : null}
 
       {acceptedChallenges.length > 0 ? (
-        <ChallengeSection
-          challenges={acceptedChallenges}
-          title="Принятые"
-          onOpen={(challenge) => setSelectedChallenge(challenge)}
-        />
+        <ChallengeSection challenges={acceptedChallenges} title="Принятые" onOpen={(challenge) => setSelectedChallenge(challenge)} />
       ) : null}
 
       {availableChallenges.length > 0 ? (
-        <ChallengeSection
-          challenges={availableChallenges}
-          title="Доступные"
-          onOpen={(challenge) => setSelectedChallenge(challenge)}
-        />
+        <ChallengeSection challenges={availableChallenges} title="Доступные" onOpen={(challenge) => setSelectedChallenge(challenge)} />
       ) : null}
 
       {selectedChallenge ? (
@@ -156,8 +185,12 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
           isRegistered={Boolean(user)}
           onAccept={() => acceptChallenge(selectedChallenge)}
           onClose={() => setSelectedChallenge(null)}
+          onComplete={completeChallenge}
+          onRefreshUserData={refreshUserData}
         />
       ) : null}
+
+      {completionReward ? <ChallengeCompleteModal reward={completionReward} onClose={() => setCompletionReward(null)} /> : null}
     </section>
   );
 }
@@ -177,6 +210,7 @@ function ChallengeSection({ challenges, title, onOpen }: { challenges: Challenge
 
 function ChallengeRow({ challenge, userLevel, onOpen }: { challenge: Challenge; userLevel: number; onOpen: () => void }) {
   const locked = challenge.difficulty_level > userLevel;
+  const completed = challenge.user_challenge_status === "completed";
 
   return (
     <button className={locked ? "challenge-row locked" : "challenge-row"} type="button" onClick={onOpen}>
@@ -185,11 +219,12 @@ function ChallengeRow({ challenge, userLevel, onOpen }: { challenge: Challenge; 
       </span>
       <span className="challenge-row-body">
         <span className="challenge-row-title">{text(challenge.title, "Челлендж")}</span>
-        <small>{text(challenge.description, "")}</small>
+        <small>{completed ? "Завершено" : text(challenge.description, "")}</small>
         <span className="challenge-meta">
           <span>{rewardText(challenge.reward_label)}</span>
           <span>Lvl {challenge.difficulty_level}</span>
           {challenge.duration_days ? <span>{challenge.duration_days} дн.</span> : null}
+          {completed ? <span>Готово</span> : null}
         </span>
       </span>
     </button>
@@ -200,16 +235,23 @@ function ChallengeDetailModal({
   challenge,
   isRegistered,
   onAccept,
-  onClose
+  onClose,
+  onComplete,
+  onRefreshUserData
 }: {
   challenge: Challenge;
   isRegistered: boolean;
   onAccept: () => void;
   onClose: () => void;
+  onComplete: (challenge: Challenge, reward: { amount: number; account: string; claimed: boolean }) => void;
+  onRefreshUserData: () => Promise<void>;
 }) {
   const locked = challenge.difficulty_level > USER_LEVEL;
   const signupChallenge = challenge.verification_logic === "signup";
+  const completed = challenge.user_challenge_status === "completed";
   const [authStatus, setAuthStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [checkStatus, setCheckStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [checkMessage, setCheckMessage] = useState<string | null>(null);
 
   async function handleSignup() {
     setAuthStatus("loading");
@@ -219,6 +261,58 @@ function ChallengeDetailModal({
     } catch (error) {
       console.error(error);
       setAuthStatus("error");
+    }
+  }
+
+  async function handleCheck() {
+    setCheckStatus("loading");
+    setCheckMessage(null);
+    try {
+      const supabase = getBrowserSupabaseClient();
+      const {
+        data: { session },
+        error
+      } = await supabase.auth.getSession();
+
+      if (error) throw error;
+      if (!session?.access_token) {
+        setCheckMessage("Сначала войдите в аккаунт.");
+        setCheckStatus("idle");
+        return;
+      }
+
+      const response = await fetch("/api/challenges/check", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ challengeId: challenge.id })
+      });
+      const payload = (await response.json()) as CheckChallengeResponse;
+
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error ?? "Не удалось проверить челлендж.");
+      }
+
+      if (!payload.completed) {
+        setCheckMessage(payload.message ?? "Проверка пока не прошла.");
+        setCheckStatus("idle");
+        return;
+      }
+
+      const reward = {
+        amount: payload.rewardAmount ?? rewardAmount(challenge.reward_label),
+        account: payload.rewardAccount ?? "core",
+        claimed: Boolean(payload.rewardClaimed)
+      };
+      onComplete(challenge, reward);
+      await onRefreshUserData();
+      setCheckStatus("idle");
+    } catch (error) {
+      console.error(error);
+      setCheckMessage(error instanceof Error ? error.message : "Не удалось проверить челлендж.");
+      setCheckStatus("error");
     }
   }
 
@@ -271,27 +365,47 @@ function ChallengeDetailModal({
             </section>
           ) : null}
 
-          {isRegistered && signupChallenge ? (
+          {completed ? (
             <div className="challenge-access completed">
               <CheckCircle2 size={17} />
-              Прогресс сохранен
+              Завершено
             </div>
           ) : null}
 
-          {!isRegistered && signupChallenge ? (
+          {!completed && !isRegistered && signupChallenge ? (
             <button className="challenge-primary-action" type="button" disabled={authStatus === "loading"} onClick={handleSignup}>
               {authStatus === "loading" ? "Открываем Google..." : "Войти через Google"}
             </button>
           ) : null}
 
-          {!signupChallenge ? (
+          {!completed && isRegistered ? (
+            <button className="challenge-primary-action" type="button" disabled={locked || checkStatus === "loading"} onClick={handleCheck}>
+              {checkStatus === "loading" ? "Проверяем..." : "Проверить и завершить"}
+            </button>
+          ) : null}
+
+          {!completed && !signupChallenge && !isRegistered ? (
             <button className={locked ? "challenge-access locked" : "challenge-primary-action"} type="button" disabled={locked} onClick={onAccept}>
               {locked ? `Доступно с уровня ${challenge.difficulty_level}` : "Принять челлендж"}
             </button>
           ) : null}
 
           {authStatus === "error" ? <p className="challenge-error">Не удалось начать вход. Проверьте подключение и попробуйте еще раз.</p> : null}
+          {checkMessage ? <p className={checkStatus === "error" ? "challenge-error" : "challenge-note"}>{checkMessage}</p> : null}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ChallengeCompleteModal({ reward, onClose }: { reward: { amount: number; account: string; claimed: boolean }; onClose: () => void }) {
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <div className="modal-sheet small challenge-complete-modal">
+        <span className="streak-complete-icon">✓</span>
+        <h2>Челлендж завершен</h2>
+        <p>{reward.claimed ? `Награда ${reward.amount}$ зачислена в ${reward.account === "core" ? "Core" : "Wallet"}.` : "Награда уже была получена ранее."}</p>
+        <button className="challenge-primary-action" type="button" onClick={onClose}>Отлично</button>
       </div>
     </div>
   );
@@ -312,9 +426,14 @@ function text(value: LocaleText, fallback: string): string {
 }
 
 function rewardText(value: RewardLabel): string {
+  const amount = rewardAmount(value);
+  return amount ? `${amount}$` : "1$";
+}
+
+function rewardAmount(value: RewardLabel): number {
   const raw = rewardLabelText(value).trim();
   const amount = raw.match(/(\d+(?:[.,]\d+)?)\s*\$/)?.[1] ?? raw.match(/\+(\d+(?:[.,]\d+)?)/)?.[1] ?? raw.match(/(\d+(?:[.,]\d+)?)/)?.[1];
-  return amount ? `${amount.replace(",", ".")}$` : "1$";
+  return amount ? Number(amount.replace(",", ".")) : 1;
 }
 
 function getVerificationLabel(type: Challenge["verification_type"]): string {
@@ -344,6 +463,19 @@ function writeCachedAcceptedChallenges(challenges: Challenge[]) {
 
 function mergeAcceptedChallenges(challenges: Challenge[], challenge: Challenge): Challenge[] {
   return challenges.some((item) => item.id === challenge.id) ? challenges : [challenge, ...challenges];
+}
+
+function mergeChallengeLists(first: Challenge[], second: Challenge[]): Challenge[] {
+  const merged = [...first];
+  second.forEach((challenge) => {
+    const index = merged.findIndex((item) => item.id === challenge.id);
+    if (index >= 0) {
+      merged[index] = { ...merged[index], ...challenge };
+    } else {
+      merged.push(challenge);
+    }
+  });
+  return merged;
 }
 
 function rewardLabelText(value: RewardLabel): string {

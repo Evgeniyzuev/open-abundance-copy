@@ -1,23 +1,25 @@
 import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import type { Database } from "@/lib/database.types";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const accessToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
   if (!supabaseUrl || !supabaseKey) {
     return NextResponse.json({ error: "Supabase environment variables are missing." }, { status: 500 });
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey, {
+  const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
     auth: {
       persistSession: false
     }
   });
 
-  const { data, error } = await supabase
+  const { data: challenges, error } = await supabase
     .from("challenges")
     .select("id,title,description,instructions,requirements,reward_label,category,difficulty_level,duration_days,image_url,verification_type,verification_logic,sort_order")
     .eq("is_active", true)
@@ -27,6 +29,31 @@ export async function GET() {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  let userChallengeMap = new Map<string, { status: string }>();
+
+  if (accessToken) {
+    const {
+      data: { user }
+    } = await supabase.auth.getUser(accessToken);
+
+    if (user) {
+      const { data: userChallenges } = await supabase
+        .from("user_challenges")
+        .select("challenge_id,status")
+        .eq("user_id", user.id);
+
+      userChallengeMap = new Map((userChallenges ?? []).map((item) => [item.challenge_id, item]));
+    }
+  }
+
+  const data = (challenges ?? []).map((challenge) => {
+    const userChallenge = userChallengeMap.get(challenge.id);
+    return {
+      ...challenge,
+      user_challenge_status: userChallenge?.status ?? null
+    };
+  });
 
   return NextResponse.json(
     { challenges: data },
