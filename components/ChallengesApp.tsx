@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Clock3, ShieldCheck, Trophy } from "lucide-react";
 import { getOrCreateLocalGuest } from "@/lib/guestIdentity";
-import { getBrowserSupabaseClient, signInWithGoogle } from "@/lib/supabaseClient";
+import { signInWithGoogle } from "@/lib/supabaseClient";
+import { useUserContext } from "@/components/UserProvider";
 
 type LocaleText = Record<string, string> | null;
 type RewardLabel = LocaleText | string | number | null;
@@ -43,7 +44,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
+  const { user } = useUserContext();
 
   useEffect(() => {
     if (!selectedChallenge) return;
@@ -112,26 +113,6 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     };
   }, [refreshNonce]);
 
-  useEffect(() => {
-    let mounted = true;
-    const supabase = getBrowserSupabaseClient();
-
-    supabase.auth.getUser().then(({ data }) => {
-      if (mounted) setRegisteredUserId(data.user?.id ?? null);
-    });
-
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setRegisteredUserId(session?.user.id ?? null);
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-
   function acceptChallenge(challenge: Challenge) {
     const nextAcceptedChallenges = mergeAcceptedChallenges(acceptedChallenges, challenge);
     setAcceptedChallenges(nextAcceptedChallenges);
@@ -172,7 +153,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       {selectedChallenge ? (
         <ChallengeDetailModal
           challenge={selectedChallenge}
-          isRegistered={Boolean(registeredUserId)}
+          isRegistered={Boolean(user)}
           onAccept={() => acceptChallenge(selectedChallenge)}
           onClose={() => setSelectedChallenge(null)}
         />
