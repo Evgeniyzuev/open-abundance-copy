@@ -204,29 +204,6 @@ create table public.guest_claims (
 );
 ```
 
-User rewards ledger:
-
-```sql
-create table public.user_reward_events (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  event_type text not null,
-  amount integer not null,
-  reason text,
-  source_id uuid,
-  created_at timestamptz not null default now(),
-  unique (user_id, event_type, source_id)
-);
-```
-
-Example reward event types:
-
-- `signup`;
-- `phone_verified`;
-- `first_task_created`;
-- `first_wish_created`;
-- `streak_completed`.
-
 ## RLS Draft
 
 Profiles:
@@ -246,16 +223,7 @@ using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 ```
 
-Guest claims:
 
-```sql
-alter table public.guest_claims enable row level security;
-
-create policy "Users can read own guest claims"
-on public.guest_claims
-for select
-using (auth.uid() = user_id);
-```
 
 Rewards should generally be written by server-side code or controlled database functions, not directly by the client.
 
@@ -263,8 +231,6 @@ Rewards should generally be written by server-side code or controlled database f
 
 1. Add local guest identity storage.
    - Generate `guestId` on first launch.
-   - Store `createdAt` and `lastSeenAt`.
-   - Expose a helper like `getOrCreateLocalGuest()`.
 
 2. Add user context layer.
    - Detect Supabase Auth session.
@@ -272,9 +238,7 @@ Rewards should generally be written by server-side code or controlled database f
    - Keep app usable in guest mode.
 
 3. Add onboarding task.
-   - Add a recommended task/card: `Save your progress`.
-   - Show it after the user creates enough local value.
-   - Do not block app use.
+   [x] Add a recommended task/card: `Save your progress`.
 
 4. Add Supabase Auth.
    - Email first.
@@ -301,11 +265,6 @@ Rewards should generally be written by server-side code or controlled database f
 8. Add restore flow.
    - If authenticated server data exists and local data is missing, offer restore.
    - Do not silently overwrite local data.
-
-9. Add rewards.
-   - Use server-authoritative `user_reward_events`.
-   - Signup/phone bonuses are created after verified milestones.
-   - Do not trust local-only guest reward state as final.
 
 10. Add account/storage settings.
     - show guest/registered state;

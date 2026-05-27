@@ -20,3 +20,9 @@ Preferred editing options:
 - after any bulk text rewrite, check that Russian strings are readable in `git diff`.
 
 If mojibake appears in a diff, stop and fix it before continuing.
+
+```text
+f:\git\
+  abundance-effect\          old app, reference only
+  abundance-effect-pwa\      new app, main repo
+```

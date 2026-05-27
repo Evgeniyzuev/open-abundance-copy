@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock3, ShieldCheck, Trophy } from "lucide-react";
+import { CheckCircle2, Clock3, ShieldCheck, Trophy } from "lucide-react";
+import { getOrCreateLocalGuest } from "@/lib/guestIdentity";
+import { getBrowserSupabaseClient, signInWithGoogle } from "@/lib/supabaseClient";
 
 type LocaleText = Record<string, string> | null;
 type RewardLabel = LocaleText | string | number | null;
@@ -41,6 +43,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedChallenge) return;
@@ -109,6 +112,34 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     };
   }, [refreshNonce]);
 
+  useEffect(() => {
+    let mounted = true;
+    const supabase = getBrowserSupabaseClient();
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (mounted) setRegisteredUserId(data.user?.id ?? null);
+    });
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setRegisteredUserId(session?.user.id ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  function acceptChallenge(challenge: Challenge) {
+    const nextAcceptedChallenges = mergeAcceptedChallenges(acceptedChallenges, challenge);
+    setAcceptedChallenges(nextAcceptedChallenges);
+    setAvailableChallenges((challenges) => challenges.filter((item) => item.id !== challenge.id));
+    writeCachedAcceptedChallenges(nextAcceptedChallenges);
+    setSelectedChallenge(null);
+  }
+
   return (
     <section className="challenges-screen">
       <header className="challenges-header">
@@ -138,7 +169,14 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
         />
       ) : null}
 
-      {selectedChallenge ? <ChallengeDetailModal challenge={selectedChallenge} onClose={() => setSelectedChallenge(null)} /> : null}
+      {selectedChallenge ? (
+        <ChallengeDetailModal
+          challenge={selectedChallenge}
+          isRegistered={Boolean(registeredUserId)}
+          onAccept={() => acceptChallenge(selectedChallenge)}
+          onClose={() => setSelectedChallenge(null)}
+        />
+      ) : null}
     </section>
   );
 }
@@ -165,9 +203,7 @@ function ChallengeRow({ challenge, userLevel, onOpen }: { challenge: Challenge; 
         {challenge.image_url ? <img alt="" src={challenge.image_url} loading="lazy" /> : <Trophy size={24} />}
       </span>
       <span className="challenge-row-body">
-        <span className="challenge-row-title">
-          {text(challenge.title, "Челлендж")}
-        </span>
+        <span className="challenge-row-title">{text(challenge.title, "Челлендж")}</span>
         <small>{text(challenge.description, "")}</small>
         <span className="challenge-meta">
           <span>{rewardText(challenge.reward_label)}</span>
@@ -179,8 +215,31 @@ function ChallengeRow({ challenge, userLevel, onOpen }: { challenge: Challenge; 
   );
 }
 
-function ChallengeDetailModal({ challenge, onClose }: { challenge: Challenge; onClose: () => void }) {
+function ChallengeDetailModal({
+  challenge,
+  isRegistered,
+  onAccept,
+  onClose
+}: {
+  challenge: Challenge;
+  isRegistered: boolean;
+  onAccept: () => void;
+  onClose: () => void;
+}) {
   const locked = challenge.difficulty_level > USER_LEVEL;
+  const signupChallenge = challenge.verification_logic === "signup";
+  const [authStatus, setAuthStatus] = useState<"idle" | "loading" | "error">("idle");
+
+  async function handleSignup() {
+    setAuthStatus("loading");
+    try {
+      await getOrCreateLocalGuest();
+      await signInWithGoogle();
+    } catch (error) {
+      console.error(error);
+      setAuthStatus("error");
+    }
+  }
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -231,9 +290,26 @@ function ChallengeDetailModal({ challenge, onClose }: { challenge: Challenge; on
             </section>
           ) : null}
 
-          <div className={locked ? "challenge-access locked" : "challenge-access"}>
-            {locked ? `Доступно с уровня ${challenge.difficulty_level}` : "Доступно на вашем уровне"}
-          </div>
+          {isRegistered && signupChallenge ? (
+            <div className="challenge-access completed">
+              <CheckCircle2 size={17} />
+              Прогресс сохранен
+            </div>
+          ) : null}
+
+          {!isRegistered && signupChallenge ? (
+            <button className="challenge-primary-action" type="button" disabled={authStatus === "loading"} onClick={handleSignup}>
+              {authStatus === "loading" ? "Открываем Google..." : "Войти через Google"}
+            </button>
+          ) : null}
+
+          {!signupChallenge ? (
+            <button className={locked ? "challenge-access locked" : "challenge-primary-action"} type="button" disabled={locked} onClick={onAccept}>
+              {locked ? `Доступно с уровня ${challenge.difficulty_level}` : "Принять челлендж"}
+            </button>
+          ) : null}
+
+          {authStatus === "error" ? <p className="challenge-error">Не удалось начать вход. Проверьте подключение и попробуйте еще раз.</p> : null}
         </div>
       </div>
     </div>
@@ -257,7 +333,7 @@ function text(value: LocaleText, fallback: string): string {
 function rewardText(value: RewardLabel): string {
   const raw = rewardLabelText(value).trim();
   const amount = raw.match(/(\d+(?:[.,]\d+)?)\s*\$/)?.[1] ?? raw.match(/\+(\d+(?:[.,]\d+)?)/)?.[1] ?? raw.match(/(\d+(?:[.,]\d+)?)/)?.[1];
-  return amount ? `⚛️${amount.replace(",", ".")}$` : "⚛️1$";
+  return amount ? `${amount.replace(",", ".")}$` : "1$";
 }
 
 function getVerificationLabel(type: Challenge["verification_type"]): string {
@@ -285,8 +361,12 @@ function writeCachedAcceptedChallenges(challenges: Challenge[]) {
   }
 }
 
+function mergeAcceptedChallenges(challenges: Challenge[], challenge: Challenge): Challenge[] {
+  return challenges.some((item) => item.id === challenge.id) ? challenges : [challenge, ...challenges];
+}
+
 function rewardLabelText(value: RewardLabel): string {
   if (typeof value === "string") return value;
   if (typeof value === "number") return String(value);
-  return text(value, "⚛️1$");
+  return text(value, "1$");
 }
