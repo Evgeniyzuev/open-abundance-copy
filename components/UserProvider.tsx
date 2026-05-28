@@ -40,7 +40,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingLevelUps, setPendingLevelUps] = useState<number[]>([]);
-  const [acknowledgingLevel, setAcknowledgingLevel] = useState(false);
 
   const refreshUserData = useCallback(async () => {
     const supabase = getBrowserSupabaseClient();
@@ -151,40 +150,39 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setPendingLevelUps(levels);
   }, [core]);
 
-  async function acknowledgeLevelUp(level: number) {
+  function acknowledgeLevelUp(level: number) {
     const supabase = getBrowserSupabaseClient();
-    setAcknowledgingLevel(true);
-    setError(null);
+
+    setPendingLevelUps((levels) => levels.filter((item) => item > level));
+    setCore((current) => current ? { ...current, last_seen_level: Math.max(current.last_seen_level, Math.min(level, current.level)) } : current);
 
     try {
-      const {
-        data: { session },
-        error: sessionError
-      } = await supabase.auth.getSession();
+      supabase.auth.getSession()
+        .then(async ({ data: { session }, error: sessionError }) => {
+          if (sessionError) throw sessionError;
+          if (!session?.access_token) throw new Error("Supabase session is missing.");
 
-      if (sessionError) throw sessionError;
-      if (!session?.access_token) throw new Error("Supabase session is missing.");
+          const response = await fetch("/api/core/level-seen", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`
+            },
+            body: JSON.stringify({ level })
+          });
+          const payload = (await response.json()) as { error?: string };
 
-      const response = await fetch("/api/core/level-seen", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({ level })
-      });
-      const payload = (await response.json()) as { error?: string };
+          if (!response.ok || payload.error) {
+            throw new Error(payload.error ?? "Failed to mark level as seen.");
+          }
 
-      if (!response.ok || payload.error) {
-        throw new Error(payload.error ?? "Failed to mark level as seen.");
-      }
-
-      setPendingLevelUps((levels) => levels.filter((item) => item > level));
-      await refreshUserData();
+          await refreshUserData();
+        })
+        .catch((levelError) => {
+          console.warn("Failed to mark level-up as seen.", levelError);
+        });
     } catch (levelError) {
-      setError(levelError instanceof Error ? levelError.message : "Failed to mark level as seen.");
-    } finally {
-      setAcknowledgingLevel(false);
+      console.warn("Failed to mark level-up as seen.", levelError);
     }
   }
 
@@ -208,7 +206,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       {pendingLevelUps[0] ? (
         <LevelUpModal
           level={pendingLevelUps[0]}
-          disabled={acknowledgingLevel}
           onClose={() => acknowledgeLevelUp(pendingLevelUps[0])}
         />
       ) : null}
@@ -222,15 +219,15 @@ export function useUserContext(): UserContextValue {
   return value;
 }
 
-function LevelUpModal({ level, disabled, onClose }: { level: number; disabled: boolean; onClose: () => void }) {
+function LevelUpModal({ level, onClose }: { level: number; onClose: () => void }) {
   return (
     <div className="modal-backdrop" role="presentation">
       <div className="modal-sheet small level-up-modal">
         <span className="level-up-badge">Lvl {level}</span>
         <h2>Новый уровень</h2>
         <p>Ваш Core достиг порога уровня {level}. Открываются новые возможности и челленджи.</p>
-        <button className="challenge-primary-action" type="button" disabled={disabled} onClick={onClose}>
-          {disabled ? "Сохраняем..." : "Отлично"}
+        <button className="challenge-primary-action" type="button" onClick={onClose}>
+          Отлично
         </button>
       </div>
     </div>
