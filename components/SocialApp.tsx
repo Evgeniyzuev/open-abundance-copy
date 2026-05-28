@@ -1,17 +1,19 @@
 "use client";
 
-import { RefreshCw, UserRound } from "lucide-react";
+import { RefreshCw, UserRound, Users } from "lucide-react";
 import { useEffect } from "react";
 import { useUserContext } from "@/components/UserProvider";
 
-export default function SocialApp({ refreshNonce }: { refreshNonce: number }) {
+type SocialTab = "profile" | "teams";
+
+export default function SocialApp({ activeTab, refreshNonce }: { activeTab: SocialTab; refreshNonce: number }) {
   const { user, profile, loading, refreshing, error, refreshUserData } = useUserContext();
 
   useEffect(() => {
     refreshUserData().catch((refreshError) => {
       console.warn("Profile refresh failed", refreshError);
     });
-  }, [refreshNonce, refreshUserData]);
+  }, [activeTab, refreshNonce, refreshUserData]);
 
   const displayName = profile?.display_name ?? user?.email ?? "Гость";
   const handle = profile?.username ? `@${profile.username}` : user?.email ?? "Локальный режим";
@@ -28,7 +30,17 @@ export default function SocialApp({ refreshNonce }: { refreshNonce: number }) {
         </button>
       </header>
 
-      {!user && !loading ? (
+      {activeTab === "teams" ? (
+        <section className="profile-panel">
+          <div className="profile-avatar placeholder">
+            <Users size={34} />
+          </div>
+          <strong>Teams</strong>
+          <p>Команды появятся здесь позже.</p>
+        </section>
+      ) : null}
+
+      {activeTab === "profile" && !user && !loading ? (
         <section className="profile-panel">
           <div className="profile-avatar placeholder">
             <UserRound size={34} />
@@ -38,7 +50,7 @@ export default function SocialApp({ refreshNonce }: { refreshNonce: number }) {
         </section>
       ) : null}
 
-      {user ? (
+      {activeTab === "profile" && user ? (
         <section className="profile-panel">
           <div className="profile-avatar">
             {profile?.avatar_url ? <img alt="" src={profile.avatar_url} /> : <UserRound size={34} />}

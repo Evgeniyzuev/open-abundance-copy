@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Landmark, RefreshCw, Wallet } from "lucide-react";
+import { useEffect } from "react";
+import { RefreshCw } from "lucide-react";
 import { useUserContext } from "@/components/UserProvider";
 
 type WalletTab = "wallet" | "core";
 
-export default function WalletApp({ refreshNonce }: { refreshNonce: number }) {
+export default function WalletApp({ activeTab, refreshNonce }: { activeTab: WalletTab; refreshNonce: number }) {
   const { core, wallet, user, loading, refreshing, error, refreshUserData } = useUserContext();
-  const [activeTab, setActiveTab] = useState<WalletTab>("wallet");
 
   useEffect(() => {
     refreshUserData().catch((refreshError) => {
@@ -27,17 +26,6 @@ export default function WalletApp({ refreshNonce }: { refreshNonce: number }) {
           <RefreshCw size={19} className={refreshing ? "spin" : ""} />
         </button>
       </header>
-
-      <div className="segmented-tabs">
-        <button className={activeTab === "wallet" ? "active" : ""} type="button" onClick={() => setActiveTab("wallet")}>
-          <Wallet size={17} />
-          Wallet
-        </button>
-        <button className={activeTab === "core" ? "active" : ""} type="button" onClick={() => setActiveTab("core")}>
-          <Landmark size={17} />
-          Core
-        </button>
-      </div>
 
       {!user && !loading ? (
         <FinanceState title="Нужна регистрация" description="Пройдите челлендж регистрации, чтобы создать Wallet и Core." />

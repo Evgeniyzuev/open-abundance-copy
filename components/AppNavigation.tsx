@@ -1,7 +1,7 @@
 "use client";
 
-import { ReactNode, useEffect, useRef, useState } from "react";
-import { CheckSquare, FileText, Heart, Map, Sparkles, Target, Trophy, TrendingUp, Users, Wallet } from "lucide-react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { CheckSquare, FileText, Heart, Landmark, Map, Sparkles, Target, Trophy, TrendingUp, UserRound, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import ChallengesApp from "@/components/ChallengesApp";
 import RecommendedWishes from "@/components/RecommendedWishes";
@@ -11,6 +11,8 @@ import WalletApp from "@/components/WalletApp";
 
 type MainTabId = "goals" | "challenges" | "spark" | "wallet" | "people";
 type GoalTabId = "desires" | "notes" | "checks" | "map" | "growth";
+type WalletTabId = "wallet" | "core";
+type SocialTabId = "profile" | "teams";
 
 type MainTab = {
   id: MainTabId;
@@ -20,6 +22,12 @@ type MainTab = {
 
 type GoalTab = {
   id: GoalTabId;
+  title: string;
+  icon: LucideIcon;
+};
+
+type TopTab = {
+  id: string;
   title: string;
   icon: LucideIcon;
 };
@@ -44,12 +52,26 @@ const goalTabs: GoalTab[] = [
   { id: "growth", title: "Рост", icon: TrendingUp }
 ];
 
+const walletTabs: TopTab[] = [
+  { id: "wallet", title: "Wallet", icon: Wallet },
+  { id: "core", title: "Core", icon: Landmark }
+];
+
+const socialTabs: TopTab[] = [
+  { id: "profile", title: "Profile", icon: UserRound },
+  { id: "teams", title: "Teams", icon: Users }
+];
+
 const REFRESH_COOLDOWN_MS = 5_000;
 const PULL_THRESHOLD_PX = 72;
+const NAV_HIDE_DELTA_PX = 8;
+const NAV_HIDE_SCROLL_Y_PX = 90;
 
 export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const [activeMainTab, setActiveMainTab] = useState<MainTabId>("goals");
   const [activeGoalTab, setActiveGoalTab] = useState<GoalTabId>("notes");
+  const [activeWalletTab, setActiveWalletTab] = useState<WalletTabId>("wallet");
+  const [activeSocialTab, setActiveSocialTab] = useState<SocialTabId>("profile");
   const [navHidden, setNavHidden] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
@@ -57,6 +79,18 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const lastRefreshAtRef = useRef(0);
   const pullDistanceRef = useRef(0);
   const touchStartYRef = useRef(0);
+  const lastGestureTouchYRef = useRef(0);
+
+  const updateNavFromScrollIntent = useCallback((delta: number, currentScrollY = window.scrollY) => {
+    if (Math.abs(delta) <= NAV_HIDE_DELTA_PX) return;
+    if (delta < 0) {
+      setNavHidden(false);
+      return;
+    }
+
+    const pageCanScroll = document.documentElement.scrollHeight > window.innerHeight + 4;
+    setNavHidden(currentScrollY > NAV_HIDE_SCROLL_Y_PX || !pageCanScroll);
+  }, []);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
@@ -65,15 +99,28 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
       const currentScrollY = window.scrollY;
       const delta = currentScrollY - lastScrollY;
 
-      if (Math.abs(delta) > 8) {
-        setNavHidden(delta > 0 && currentScrollY > 90);
+      if (Math.abs(delta) > NAV_HIDE_DELTA_PX) {
+        updateNavFromScrollIntent(delta, currentScrollY);
         lastScrollY = currentScrollY;
       }
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [updateNavFromScrollIntent]);
+
+  useEffect(() => {
+    const handleWheel = (event: WheelEvent) => {
+      updateNavFromScrollIntent(event.deltaY);
+    };
+
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    return () => window.removeEventListener("wheel", handleWheel);
+  }, [updateNavFromScrollIntent]);
+
+  useEffect(() => {
+    setNavHidden(false);
+  }, [activeMainTab, activeGoalTab, activeWalletTab, activeSocialTab]);
 
   useEffect(() => {
     const requestRefresh = () => {
@@ -84,13 +131,23 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
     };
 
     const handleTouchStart = (event: TouchEvent) => {
-      if (window.scrollY > 0 || event.touches.length !== 1) return;
-      touchStartYRef.current = event.touches[0].clientY;
+      if (event.touches.length !== 1) return;
+      const touchY = event.touches[0].clientY;
+      lastGestureTouchYRef.current = touchY;
+      if (window.scrollY > 0) return;
+      touchStartYRef.current = touchY;
     };
 
     const handleTouchMove = (event: TouchEvent) => {
+      if (event.touches.length !== 1) return;
+      const touchY = event.touches[0].clientY;
+      if (lastGestureTouchYRef.current !== 0) {
+        updateNavFromScrollIntent(lastGestureTouchYRef.current - touchY);
+      }
+      lastGestureTouchYRef.current = touchY;
+
       if (window.scrollY > 0 || touchStartYRef.current === 0) return;
-      const distance = event.touches[0].clientY - touchStartYRef.current;
+      const distance = touchY - touchStartYRef.current;
       if (distance <= 0) return;
       const nextDistance = Math.min(distance, PULL_THRESHOLD_PX);
       pullDistanceRef.current = nextDistance;
@@ -101,6 +158,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
     const handleTouchEnd = () => {
       if (pullDistanceRef.current >= PULL_THRESHOLD_PX) requestRefresh();
       touchStartYRef.current = 0;
+      lastGestureTouchYRef.current = 0;
       pullDistanceRef.current = 0;
       setIsPulling(false);
       setPullDistance(0);
@@ -117,7 +175,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
       window.removeEventListener("touchend", handleTouchEnd);
       window.removeEventListener("touchcancel", handleTouchEnd);
     };
-  }, []);
+  }, [updateNavFromScrollIntent]);
 
   const currentTitle = getCurrentTitle(activeMainTab, activeGoalTab);
   const showNotes = activeMainTab === "goals" && activeGoalTab === "notes";
@@ -126,20 +184,28 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const showChallenges = activeMainTab === "challenges";
   const showWallet = activeMainTab === "wallet";
   const showPeople = activeMainTab === "people";
+  const topTabs = getTopTabs(activeMainTab);
+  const activeTopTab = getActiveTopTab(activeMainTab, activeGoalTab, activeWalletTab, activeSocialTab);
+
+  function handleTopTabChange(tab: string) {
+    if (activeMainTab === "goals") setActiveGoalTab(tab as GoalTabId);
+    if (activeMainTab === "wallet") setActiveWalletTab(tab as WalletTabId);
+    if (activeMainTab === "people") setActiveSocialTab(tab as SocialTabId);
+  }
 
   return (
     <>
       <div className={`pull-refresh-indicator ${isPulling ? "visible" : ""}`} style={{ transform: `translate(-50%, ${pullDistance}px)` }}>
         {pullDistance >= PULL_THRESHOLD_PX ? "Отпустите" : "Потяните"}
       </div>
-      <TopTabBar activeMainTab={activeMainTab} activeGoalTab={activeGoalTab} hidden={navHidden} onGoalTabChange={setActiveGoalTab} />
+      <TopTabBar activeMainTab={activeMainTab} activeTab={activeTopTab} hidden={navHidden} tabs={topTabs} onTabChange={handleTopTabChange} />
       <section className="app-content">
         {showNotes ? notesSlot : null}
         {showWishes ? <RecommendedWishes refreshNonce={refreshNonce} /> : null}
         {showChecks ? <TasksApp /> : null}
         {showChallenges ? <ChallengesApp refreshNonce={refreshNonce} /> : null}
-        {showWallet ? <WalletApp refreshNonce={refreshNonce} /> : null}
-        {showPeople ? <SocialApp refreshNonce={refreshNonce} /> : null}
+        {showWallet ? <WalletApp activeTab={activeWalletTab} refreshNonce={refreshNonce} /> : null}
+        {showPeople ? <SocialApp activeTab={activeSocialTab} refreshNonce={refreshNonce} /> : null}
         {!showNotes && !showWishes && !showChecks && !showChallenges && !showWallet && !showPeople ? <PlaceholderScreen title={currentTitle} /> : null}
       </section>
       <BottomTabBar activeTab={activeMainTab} hidden={navHidden} onTabChange={setActiveMainTab} />
@@ -149,24 +215,23 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
 
 type TopTabBarProps = {
   activeMainTab: MainTabId;
-  activeGoalTab: GoalTabId;
+  activeTab?: string;
   hidden: boolean;
-  onGoalTabChange: (tab: GoalTabId) => void;
+  tabs: TopTab[];
+  onTabChange: (tab: string) => void;
 };
 
-function TopTabBar({ activeMainTab, activeGoalTab, hidden, onGoalTabChange }: TopTabBarProps) {
-  const tabs = activeMainTab === "goals" ? goalTabs : [];
-
+function TopTabBar({ activeMainTab, activeTab, hidden, tabs, onTabChange }: TopTabBarProps) {
   return (
     <nav className={`glass-tabbar top-tabbar ${hidden ? "nav-hidden" : ""}`} aria-label="Вложенная навигация">
       {tabs.length > 0 ? (
         tabs.map((tab) => (
           <TabButton
-            active={tab.id === activeGoalTab}
+            active={tab.id === activeTab}
             icon={tab.icon}
             key={tab.id}
             title={tab.title}
-            onClick={() => onGoalTabChange(tab.id)}
+            onClick={() => onTabChange(tab.id)}
           />
         ))
       ) : (
@@ -229,6 +294,25 @@ function PlaceholderScreen({ title }: { title: string }) {
 
 function getMainTabTitle(tab: MainTabId): string {
   return mainTabs.find((item) => item.id === tab)?.title ?? "Раздел";
+}
+
+function getTopTabs(tab: MainTabId): TopTab[] {
+  if (tab === "goals") return goalTabs;
+  if (tab === "wallet") return walletTabs;
+  if (tab === "people") return socialTabs;
+  return [];
+}
+
+function getActiveTopTab(
+  mainTab: MainTabId,
+  goalTab: GoalTabId,
+  walletTab: WalletTabId,
+  socialTab: SocialTabId
+): string | undefined {
+  if (mainTab === "goals") return goalTab;
+  if (mainTab === "wallet") return walletTab;
+  if (mainTab === "people") return socialTab;
+  return undefined;
 }
 
 function getCurrentTitle(mainTab: MainTabId, goalTab: GoalTabId): string {
