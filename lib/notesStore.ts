@@ -27,11 +27,12 @@ export type Note = {
 };
 
 const DB_NAME = "open-abundance-offline";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const NOTES_STORE = "notes";
 const LISTS_STORE = "lists";
 const TASKS_STORE = "tasks";
 const TASK_COMPLETIONS_STORE = "taskCompletions";
+const GUEST_STORE = "guestIdentity";
 
 type NoteInput = Pick<Note, "id" | "title" | "body" | "syncStatus"> & {
   listId?: string;
@@ -58,6 +59,9 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(TASK_COMPLETIONS_STORE)) {
         db.createObjectStore(TASK_COMPLETIONS_STORE, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(GUEST_STORE)) {
+        db.createObjectStore(GUEST_STORE, { keyPath: "key" });
       }
     };
 

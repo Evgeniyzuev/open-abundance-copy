@@ -35,9 +35,10 @@ export type TaskInput = Pick<TaskItem, "id" | "title" | "description" | "schedul
 };
 
 const DB_NAME = "open-abundance-offline";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const TASKS_STORE = "tasks";
 const TASK_COMPLETIONS_STORE = "taskCompletions";
+const GUEST_STORE = "guestIdentity";
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -56,6 +57,9 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(TASK_COMPLETIONS_STORE)) {
         db.createObjectStore(TASK_COMPLETIONS_STORE, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(GUEST_STORE)) {
+        db.createObjectStore(GUEST_STORE, { keyPath: "key" });
       }
     };
 
