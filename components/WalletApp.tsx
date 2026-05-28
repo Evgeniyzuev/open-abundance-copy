@@ -14,7 +14,7 @@ export default function WalletApp({ refreshNonce }: { refreshNonce: number }) {
     refreshUserData().catch((refreshError) => {
       console.warn("Wallet refresh failed", refreshError);
     });
-  }, [refreshNonce, refreshUserData]);
+  }, [activeTab, refreshNonce, refreshUserData]);
 
   return (
     <section className="finance-screen">

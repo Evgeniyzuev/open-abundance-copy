@@ -52,9 +52,11 @@ type ChallengesAppProps = {
 
 export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   const [acceptedChallenges, setAcceptedChallenges] = useState<Challenge[]>([]);
+  const [completedChallenges, setCompletedChallenges] = useState<Challenge[]>([]);
   const [availableChallenges, setAvailableChallenges] = useState<Challenge[]>([]);
   const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
   const [completionReward, setCompletionReward] = useState<{ amount: number; account: string; claimed: boolean } | null>(null);
+  const [completedOpen, setCompletedOpen] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { user, refreshUserData } = useUserContext();
@@ -74,7 +76,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     let mounted = true;
 
     async function loadChallenges() {
-      const cachedAcceptedChallenges = readCachedAcceptedChallenges();
+      const cachedAcceptedChallenges = readCachedAcceptedChallenges().filter(isActiveChallenge);
 
       if (cachedAcceptedChallenges.length > 0) {
         setAcceptedChallenges(cachedAcceptedChallenges);
@@ -106,17 +108,20 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
 
         if (mounted) {
           const nextChallenges = payload.challenges ?? [];
-          const serverAcceptedChallenges = nextChallenges.filter((challenge) => Boolean(challenge.user_challenge_status));
+          const serverCompletedChallenges = nextChallenges.filter(isCompletedChallenge);
+          const serverAcceptedChallenges = nextChallenges.filter(isActiveChallenge);
           const mergedAcceptedChallenges = mergeChallengeLists(cachedAcceptedChallenges, serverAcceptedChallenges);
           const acceptedIds = new Set(mergedAcceptedChallenges.map((challenge) => challenge.id));
+          const completedIds = new Set(serverCompletedChallenges.map((challenge) => challenge.id));
           const syncedAcceptedChallenges = mergedAcceptedChallenges.map((cachedChallenge) => {
             const freshChallenge = nextChallenges.find((challenge) => challenge.id === cachedChallenge.id);
             return freshChallenge ? { ...cachedChallenge, ...freshChallenge } : cachedChallenge;
-          });
+          }).filter(isActiveChallenge);
 
           setAcceptedChallenges(syncedAcceptedChallenges);
+          setCompletedChallenges(serverCompletedChallenges);
           writeCachedAcceptedChallenges(syncedAcceptedChallenges);
-          setAvailableChallenges(nextChallenges.filter((challenge) => !acceptedIds.has(challenge.id)));
+          setAvailableChallenges(nextChallenges.filter((challenge) => !acceptedIds.has(challenge.id) && !completedIds.has(challenge.id)));
           setStatus("ready");
         }
       } catch {
@@ -136,7 +141,8 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   }, [refreshNonce, user]);
 
   function acceptChallenge(challenge: Challenge) {
-    const nextAcceptedChallenges = mergeAcceptedChallenges(acceptedChallenges, challenge);
+    const acceptedChallenge: Challenge = { ...challenge, user_challenge_status: "accepted" };
+    const nextAcceptedChallenges = mergeAcceptedChallenges(acceptedChallenges, acceptedChallenge);
     setAcceptedChallenges(nextAcceptedChallenges);
     setAvailableChallenges((challenges) => challenges.filter((item) => item.id !== challenge.id));
     writeCachedAcceptedChallenges(nextAcceptedChallenges);
@@ -148,14 +154,43 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       ...challenge,
       user_challenge_status: "completed"
     };
-    const nextAcceptedChallenges = mergeAcceptedChallenges(acceptedChallenges, completedChallenge).map((item) =>
-      item.id === completedChallenge.id ? completedChallenge : item
-    );
+    const nextAcceptedChallenges = acceptedChallenges.filter((item) => item.id !== completedChallenge.id);
+    const nextCompletedChallenges = [completedChallenge, ...completedChallenges.filter((item) => item.id !== completedChallenge.id)];
+
     setAcceptedChallenges(nextAcceptedChallenges);
+    setCompletedChallenges(nextCompletedChallenges);
     setAvailableChallenges((challenges) => challenges.filter((item) => item.id !== challenge.id));
     writeCachedAcceptedChallenges(nextAcceptedChallenges);
     setSelectedChallenge(completedChallenge);
     setCompletionReward(reward);
+  }
+
+  if (completedOpen) {
+    return (
+      <>
+        <ChallengeArchiveScreen
+          challenges={completedChallenges}
+          onBack={() => {
+            setCompletedOpen(false);
+            setSelectedChallenge(null);
+          }}
+          onOpen={(challenge) => setSelectedChallenge(challenge)}
+        />
+
+        {selectedChallenge ? (
+          <ChallengeDetailModal
+            challenge={selectedChallenge}
+            isRegistered={Boolean(user)}
+            onAccept={() => acceptChallenge(selectedChallenge)}
+            onClose={() => setSelectedChallenge(null)}
+            onComplete={completeChallenge}
+            onRefreshUserData={refreshUserData}
+          />
+        ) : null}
+
+        {completionReward ? <ChallengeCompleteModal reward={completionReward} onClose={() => setCompletionReward(null)} /> : null}
+      </>
+    );
   }
 
   return (
@@ -179,6 +214,15 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
         <ChallengeSection challenges={availableChallenges} title="Доступные" onOpen={(challenge) => setSelectedChallenge(challenge)} />
       ) : null}
 
+      {completedChallenges.length > 0 ? (
+        <section className="challenge-section">
+          <button className="challenge-archive-link" type="button" onClick={() => setCompletedOpen(true)}>
+            <span>{"\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u043d\u044b\u0435"}</span>
+            <strong>{completedChallenges.length}</strong>
+          </button>
+        </section>
+      ) : null}
+
       {selectedChallenge ? (
         <ChallengeDetailModal
           challenge={selectedChallenge}
@@ -191,6 +235,35 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       ) : null}
 
       {completionReward ? <ChallengeCompleteModal reward={completionReward} onClose={() => setCompletionReward(null)} /> : null}
+    </section>
+  );
+}
+
+function ChallengeArchiveScreen({
+  challenges,
+  onBack,
+  onOpen
+}: {
+  challenges: Challenge[];
+  onBack: () => void;
+  onOpen: (challenge: Challenge) => void;
+}) {
+  return (
+    <section className="challenges-screen challenge-archive-screen">
+      <header className="task-archive-topbar">
+        <button className="back-button" type="button" onClick={onBack}>{"\u2039"}</button>
+        <h1>{"\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u043d\u044b\u0435"}</h1>
+      </header>
+
+      {challenges.length === 0 ? (
+        <div className="task-empty">{"\u0417\u0434\u0435\u0441\u044c \u043f\u043e\u043a\u0430 \u043d\u0438\u0447\u0435\u0433\u043e \u043d\u0435\u0442."}</div>
+      ) : (
+        <div className="challenge-list">
+          {challenges.map((challenge) => (
+            <ChallengeRow challenge={challenge} key={challenge.id} userLevel={USER_LEVEL} onOpen={() => onOpen(challenge)} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -455,10 +528,18 @@ function readCachedAcceptedChallenges(): Challenge[] {
 
 function writeCachedAcceptedChallenges(challenges: Challenge[]) {
   try {
-    window.localStorage.setItem(ACCEPTED_CHALLENGES_CACHE_KEY, JSON.stringify(challenges));
+    window.localStorage.setItem(ACCEPTED_CHALLENGES_CACHE_KEY, JSON.stringify(challenges.filter(isActiveChallenge)));
   } catch {
     // Accepted challenges remain usable even when local cache writes fail.
   }
+}
+
+function isActiveChallenge(challenge: Challenge): boolean {
+  return challenge.user_challenge_status === "accepted" || challenge.user_challenge_status === "failed";
+}
+
+function isCompletedChallenge(challenge: Challenge): boolean {
+  return challenge.user_challenge_status === "completed";
 }
 
 function mergeAcceptedChallenges(challenges: Challenge[], challenge: Challenge): Challenge[] {

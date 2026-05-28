@@ -21,6 +21,14 @@ type UserContextValue = {
   refreshUserData: () => Promise<void>;
 };
 
+type UserContextResponse = {
+  user: User | null;
+  profile: UserProfile | null;
+  core: CoreAccount | null;
+  wallet: WalletAccount | null;
+  error?: string;
+};
+
 const UserContext = createContext<UserContextValue | undefined>(undefined);
 
 export function UserProvider({ children }: { children: ReactNode }) {
@@ -41,34 +49,34 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     try {
       const {
-        data: { user: currentUser },
-        error: userError
-      } = await supabase.auth.getUser();
+        data: { session },
+        error: sessionError
+      } = await supabase.auth.getSession();
 
-      if (userError) throw userError;
+      if (sessionError) throw sessionError;
 
-      setUser(currentUser ?? null);
-
-      if (!currentUser) {
+      if (!session?.access_token) {
+        setUser(null);
         setProfile(null);
         setCore(null);
         setWallet(null);
         return;
       }
 
-      const [profileResult, coreResult, walletResult] = await Promise.all([
-        supabase.from("user_profiles").select("*").eq("user_id", currentUser.id).maybeSingle(),
-        supabase.from("core_accounts").select("*").eq("user_id", currentUser.id).maybeSingle(),
-        supabase.from("wallet_accounts").select("*").eq("user_id", currentUser.id).maybeSingle()
-      ]);
+      const response = await fetch("/api/user/context", {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      const payload = (await response.json()) as UserContextResponse;
 
-      if (profileResult.error) throw profileResult.error;
-      if (coreResult.error) throw coreResult.error;
-      if (walletResult.error) throw walletResult.error;
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error ?? "Failed to refresh user data.");
+      }
 
-      setProfile(profileResult.data);
-      setCore(coreResult.data);
-      setWallet(walletResult.data);
+      setUser(payload.user);
+      setProfile(payload.profile);
+      setCore(payload.core);
+      setWallet(payload.wallet);
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : "Failed to refresh user data.");
     } finally {
