@@ -10,7 +10,6 @@ import {
   ReminderList,
   saveList,
   saveNote,
-  syncPendingNotes,
   toggleNoteCompleted
 } from "@/lib/notesStore";
 
@@ -79,8 +78,6 @@ export default function NotesApp() {
     });
   }, [activeView, notes]);
 
-  const pendingCount = [...notes, ...lists].filter((item) => item.syncStatus !== "synced").length;
-
   async function refreshData() {
     const [storedNotes, storedLists] = await Promise.all([getNotes(), getLists()]);
     setNotes(storedNotes);
@@ -90,20 +87,11 @@ export default function NotesApp() {
     }
   }
 
-  async function syncNow() {
-    if (!navigator.onLine) return;
-    await syncPendingNotes();
-    await refreshData();
-  }
-
   useEffect(() => {
     setConnection(navigator.onLine ? "online" : "offline");
     refreshData();
 
-    const handleOnline = () => {
-      setConnection("online");
-      syncNow();
-    };
+    const handleOnline = () => setConnection("online");
     const handleOffline = () => setConnection("offline");
 
     window.addEventListener("online", handleOnline);
@@ -160,12 +148,11 @@ export default function NotesApp() {
       body,
       listId: noteForm.listId || undefined,
       reminders: noteForm.reminders,
-      syncStatus: navigator.onLine ? "pending_sync" : "local"
+      syncStatus: "local"
     });
 
     closeNoteModal();
     await refreshData();
-    if (navigator.onLine) await syncNow();
   }
 
   async function handleListSubmit(event: FormEvent<HTMLFormElement>) {
@@ -179,14 +166,13 @@ export default function NotesApp() {
       title,
       icon: listForm.icon.trim() || "•",
       color: listForm.color,
-      syncStatus: navigator.onLine ? "pending_sync" : "local"
+      syncStatus: "local"
     });
 
     setListForm(emptyListForm);
     setListModalOpen(false);
     setDetailView(`list:${id}`);
     await refreshData();
-    if (navigator.onLine) await syncNow();
   }
 
   function addReminder() {
@@ -209,13 +195,11 @@ export default function NotesApp() {
     await deleteNote(note.id);
     setInfoNoteId(null);
     await refreshData();
-    if (navigator.onLine) await syncNow();
   }
 
   async function completeNote(note: Note) {
     await toggleNoteCompleted(note.id);
     await refreshData();
-    if (navigator.onLine) await syncNow();
   }
 
   async function removeListConfirmed(list: ReminderList) {
@@ -224,7 +208,6 @@ export default function NotesApp() {
     await deleteList(list.id);
     setDetailView(null);
     await refreshData();
-    if (navigator.onLine) await syncNow();
   }
 
   return (
@@ -246,7 +229,6 @@ export default function NotesApp() {
           connection={connection}
           lists={lists}
           notes={notes}
-          pendingCount={pendingCount}
           onCreateList={() => setListModalOpen(true)}
           onCreateNote={openCreateNote}
           onDeleteList={removeListConfirmed}
@@ -293,21 +275,20 @@ type HomeScreenProps = {
   connection: ConnectionState;
   lists: ReminderList[];
   notes: Note[];
-  pendingCount: number;
   onCreateList: () => void;
   onCreateNote: () => void;
   onDeleteList: (list: ReminderList) => void;
   onOpenList: (view: ViewId) => void;
 };
 
-function HomeScreen({ connection, lists, notes, pendingCount, onCreateList, onCreateNote, onDeleteList, onOpenList }: HomeScreenProps) {
+function HomeScreen({ connection, lists, notes, onCreateList, onCreateNote, onDeleteList, onOpenList }: HomeScreenProps) {
   return (
     <>
       <header className="home-topbar">
         <div className="status-line">
           <span className={`dot ${connection}`} />
           <span>{connection}</span>
-          <span>{pendingCount} sync</span>
+          <span>local</span>
         </div>
         <div className="top-actions">
           <button className="round-button search-button" type="button" aria-label="Поиск">⌕</button>

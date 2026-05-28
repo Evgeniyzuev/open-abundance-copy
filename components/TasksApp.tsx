@@ -95,7 +95,7 @@ export default function TasksApp() {
       schedule: buildSchedule(form),
       imageUrl: form.imageMode === "url" ? form.imageUrl.trim() || undefined : undefined,
       thumbnailDataUrl: form.imageMode === "upload" ? form.thumbnailDataUrl || undefined : undefined,
-      syncStatus: navigator.onLine ? "pending_sync" : "local"
+      syncStatus: "local"
     });
 
     setForm({ ...emptyTaskForm, startDate: todayKey() });
@@ -136,7 +136,7 @@ export default function TasksApp() {
       schedule,
       imageUrl: task.imageUrl,
       thumbnailDataUrl: task.thumbnailDataUrl,
-      syncStatus: navigator.onLine ? "pending_sync" : "local"
+      syncStatus: "local"
     });
     setStreakDecisionTask(null);
     await refreshTasks();

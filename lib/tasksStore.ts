@@ -96,7 +96,8 @@ export async function getAllTasks(): Promise<TaskItem[]> {
 }
 
 export async function getTaskCompletions(): Promise<TaskCompletion[]> {
-  return withStore<TaskCompletion[]>(TASK_COMPLETIONS_STORE, "readonly", (store) => store.getAll());
+  const completions = await withStore<TaskCompletion[]>(TASK_COMPLETIONS_STORE, "readonly", (store) => store.getAll());
+  return completions.map((completion) => ({ ...completion, syncStatus: "local" }));
 }
 
 export async function saveTask(input: TaskInput): Promise<TaskItem> {
@@ -129,14 +130,14 @@ export async function completeTaskDay(taskId: string, localDate: string): Promis
     taskId,
     localDate,
     completedAt: new Date().toISOString(),
-    syncStatus: navigator.onLine ? "pending_sync" : "local"
+    syncStatus: "local"
   };
 
   await withStore<IDBValidKey>(TASK_COMPLETIONS_STORE, "readwrite", (store) => store.put(completion));
   const task = await getTask(taskId);
   if (task && task.schedule.type === "once") {
     await withStore<IDBValidKey>(TASKS_STORE, "readwrite", (store) =>
-      store.put({ ...task, completed: true, updatedAt: new Date().toISOString(), syncStatus: navigator.onLine ? "pending_sync" : "local" })
+      store.put({ ...task, completed: true, updatedAt: new Date().toISOString(), syncStatus: "local" })
     );
   }
 }
@@ -145,7 +146,7 @@ export async function completeTask(id: string): Promise<void> {
   const task = await getTask(id);
   if (!task) return;
   await withStore<IDBValidKey>(TASKS_STORE, "readwrite", (store) =>
-    store.put({ ...task, completed: true, updatedAt: new Date().toISOString(), syncStatus: navigator.onLine ? "pending_sync" : "local" })
+    store.put({ ...task, completed: true, updatedAt: new Date().toISOString(), syncStatus: "local" })
   );
 }
 
@@ -153,7 +154,7 @@ export async function deleteTask(id: string): Promise<void> {
   const task = await getTask(id);
   if (!task) return;
   await withStore<IDBValidKey>(TASKS_STORE, "readwrite", (store) =>
-    store.put({ ...task, deleted: true, updatedAt: new Date().toISOString(), syncStatus: navigator.onLine ? "pending_sync" : "local" })
+    store.put({ ...task, deleted: true, updatedAt: new Date().toISOString(), syncStatus: "local" })
   );
 }
 
@@ -181,6 +182,7 @@ function normalizeTask(task: TaskItem): TaskItem {
     ...task,
     description: task.description ?? "",
     subtasks: Array.isArray(task.subtasks) ? task.subtasks : [],
-    completed: Boolean(task.completed)
+    completed: Boolean(task.completed),
+    syncStatus: "local"
   };
 }

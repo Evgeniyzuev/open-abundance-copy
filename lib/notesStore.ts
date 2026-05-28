@@ -94,7 +94,7 @@ export async function getNotes(): Promise<Note[]> {
 
 export async function getLists(): Promise<ReminderList[]> {
   const lists = await withStore<ReminderList[]>(LISTS_STORE, "readonly", (store) => store.getAll());
-  return lists.filter((list) => !list.deleted).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return lists.map(normalizeList).filter((list) => !list.deleted).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 export async function saveList(input: ListInput): Promise<ReminderList> {
@@ -123,7 +123,7 @@ export async function deleteList(id: string): Promise<void> {
       ...existing,
       deleted: true,
       updatedAt: new Date().toISOString(),
-      syncStatus: navigator.onLine ? "pending_sync" : "local"
+      syncStatus: "local"
     })
   );
 
@@ -137,7 +137,7 @@ export async function deleteList(id: string): Promise<void> {
             ...note,
             listId: undefined,
             updatedAt: new Date().toISOString(),
-            syncStatus: navigator.onLine ? "pending_sync" : "local"
+            syncStatus: "local"
           })
         )
       )
@@ -171,7 +171,7 @@ export async function toggleNoteCompleted(id: string): Promise<void> {
       ...existing,
       completed: !existing.completed,
       updatedAt: new Date().toISOString(),
-      syncStatus: navigator.onLine ? "pending_sync" : "local"
+      syncStatus: "local"
     })
   );
 }
@@ -184,7 +184,7 @@ export async function deleteNote(id: string): Promise<void> {
       ...existing,
       deleted: true,
       updatedAt: new Date().toISOString(),
-      syncStatus: navigator.onLine ? "pending_sync" : "local"
+      syncStatus: "local"
     })
   );
 }
@@ -195,56 +195,22 @@ async function getNote(id: string): Promise<Note | undefined> {
 }
 
 async function getList(id: string): Promise<ReminderList | undefined> {
-  return withStore<ReminderList | undefined>(LISTS_STORE, "readonly", (store) => store.get(id));
+  const list = await withStore<ReminderList | undefined>(LISTS_STORE, "readonly", (store) => store.get(id));
+  return list ? normalizeList(list) : undefined;
 }
 
 function normalizeNote(note: Note): Note {
   return {
     ...note,
     reminders: Array.isArray(note.reminders) ? note.reminders : [],
-    completed: Boolean(note.completed)
+    completed: Boolean(note.completed),
+    syncStatus: "local"
   };
 }
 
-export async function syncPendingNotes(): Promise<void> {
-  const notes = await withStore<Note[]>(NOTES_STORE, "readonly", (store) => store.getAll());
-  const lists = await withStore<ReminderList[]>(LISTS_STORE, "readonly", (store) => store.getAll());
-  const pendingNotes = notes.map(normalizeNote).filter((note) => note.syncStatus !== "synced");
-  const pendingLists = lists.filter((list) => list.syncStatus !== "synced");
-  if (pendingNotes.length === 0 && pendingLists.length === 0) return;
-
-  try {
-    const response = await fetch("/api/notes/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: pendingNotes, lists: pendingLists })
-    });
-
-    if (!response.ok) throw new Error("Sync failed");
-
-    const result = (await response.json()) as { notes: Note[]; lists: ReminderList[] };
-
-    await Promise.all([
-      ...result.notes.map((note) =>
-        note.deleted
-          ? withStore<undefined>(NOTES_STORE, "readwrite", (store) => store.delete(note.id))
-          : withStore<IDBValidKey>(NOTES_STORE, "readwrite", (store) => store.put(normalizeNote(note)))
-      ),
-      ...result.lists.map((list) =>
-        list.deleted
-          ? withStore<undefined>(LISTS_STORE, "readwrite", (store) => store.delete(list.id))
-          : withStore<IDBValidKey>(LISTS_STORE, "readwrite", (store) => store.put(list))
-      )
-    ]);
-  } catch (error) {
-    await Promise.all([
-      ...pendingNotes.map((note) =>
-        withStore<IDBValidKey>(NOTES_STORE, "readwrite", (store) => store.put({ ...note, syncStatus: "failed" }))
-      ),
-      ...pendingLists.map((list) =>
-        withStore<IDBValidKey>(LISTS_STORE, "readwrite", (store) => store.put({ ...list, syncStatus: "failed" }))
-      )
-    ]);
-    throw error;
-  }
+function normalizeList(list: ReminderList): ReminderList {
+  return {
+    ...list,
+    syncStatus: "local"
+  };
 }
