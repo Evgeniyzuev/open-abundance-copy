@@ -40,6 +40,17 @@ Why this matters: after `guestIdentity` moved the shared DB to version 4, `notes
 
 For MVP, notes and tasks/streaks are local-only. Do not make their create/update/delete flows wait for Supabase sync unless a dedicated sync plan is being implemented and tested offline.
 
+## Frontend Verification
+
+After frontend UI changes, try to verify the result visually in the in-app browser.
+
+If the browser tool is unavailable, for example `Browser is not available: iab`:
+
+- state this clearly in the final result;
+- run the available technical checks instead, such as `tsc --noEmit`, `next build`, and an HTTP 200 check against the local dev server when relevant;
+- stop the dev server after the fallback check;
+- do not present the change as visually verified.
+
 ```text
 f:\git\
   abundance-effect\          old app, reference only

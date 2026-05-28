@@ -65,7 +65,6 @@ const socialTabs: TopTab[] = [
 const REFRESH_COOLDOWN_MS = 5_000;
 const PULL_THRESHOLD_PX = 72;
 const NAV_HIDE_DELTA_PX = 8;
-const NAV_HIDE_SCROLL_Y_PX = 90;
 
 export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const [activeMainTab, setActiveMainTab] = useState<MainTabId>("goals");
@@ -81,15 +80,14 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const touchStartYRef = useRef(0);
   const lastGestureTouchYRef = useRef(0);
 
-  const updateNavFromScrollIntent = useCallback((delta: number, currentScrollY = window.scrollY) => {
+  const updateNavFromScrollIntent = useCallback((delta: number) => {
     if (Math.abs(delta) <= NAV_HIDE_DELTA_PX) return;
     if (delta < 0) {
       setNavHidden(false);
       return;
     }
 
-    const pageCanScroll = document.documentElement.scrollHeight > window.innerHeight + 4;
-    setNavHidden(currentScrollY > NAV_HIDE_SCROLL_Y_PX || !pageCanScroll);
+    setNavHidden(true);
   }, []);
 
   useEffect(() => {
@@ -100,7 +98,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
       const delta = currentScrollY - lastScrollY;
 
       if (Math.abs(delta) > NAV_HIDE_DELTA_PX) {
-        updateNavFromScrollIntent(delta, currentScrollY);
+        updateNavFromScrollIntent(delta);
         lastScrollY = currentScrollY;
       }
     };
