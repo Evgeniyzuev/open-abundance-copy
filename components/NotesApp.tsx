@@ -12,6 +12,8 @@ import {
   saveNote,
   toggleNoteCompleted
 } from "@/lib/notesStore";
+import { useUserContext } from "@/components/UserProvider";
+import type { AppLocale, MessageKey } from "@/lib/i18n";
 
 type ConnectionState = "online" | "offline";
 type ViewId = "today" | "planned" | "all" | "completed" | `list:${string}`;
@@ -19,16 +21,16 @@ type ModalMode = "create" | "edit";
 
 type SmartList = {
   id: ViewId;
-  title: string;
+  titleKey: MessageKey;
   icon: string;
   tone: string;
 };
 
 const smartLists: SmartList[] = [
-  { id: "today", title: "Сегодня", icon: "🗓", tone: "blue" },
-  { id: "planned", title: "В планах", icon: "📋", tone: "red" },
-  { id: "all", title: "Все", icon: "📥", tone: "black" },
-  { id: "completed", title: "Завершено", icon: "✔️", tone: "gray" }
+  { id: "today", titleKey: "notes.smart.today", icon: "🗓", tone: "blue" },
+  { id: "planned", titleKey: "notes.smart.planned", icon: "📋", tone: "red" },
+  { id: "all", titleKey: "notes.smart.all", icon: "📥", tone: "black" },
+  { id: "completed", titleKey: "notes.smart.completed", icon: "✔️", tone: "gray" }
 ];
 
 const listColors = ["#ff9500", "#007aff", "#34c759", "#ff3b30", "#af52de", "#8e8e93"];
@@ -55,6 +57,7 @@ const emptyListForm = {
 };
 
 export default function NotesApp() {
+  const { locale, t } = useUserContext();
   const [notes, setNotes] = useState<Note[]>([]);
   const [lists, setLists] = useState<ReminderList[]>([]);
   const [noteForm, setNoteForm] = useState(emptyNoteForm);
@@ -67,7 +70,7 @@ export default function NotesApp() {
   const [connection, setConnection] = useState<ConnectionState>("online");
 
   const activeView = detailView ?? "all";
-  const activeTitle = getViewTitle(activeView, lists);
+  const activeTitle = getViewTitle(activeView, lists, t);
   const activeNote = infoNoteId ? notes.find((note) => note.id === infoNoteId) : undefined;
 
   const visibleNotes = useMemo(() => {
@@ -144,7 +147,7 @@ export default function NotesApp() {
 
     await saveNote({
       id: editingId ?? crypto.randomUUID(),
-      title: title || "Без названия",
+      title: title || t("notes.untitled"),
       body,
       listId: noteForm.listId || undefined,
       reminders: noteForm.reminders,
@@ -203,7 +206,7 @@ export default function NotesApp() {
   }
 
   async function removeListConfirmed(list: ReminderList) {
-    const confirmed = window.confirm(`Удалить список "${list.title}"? Заметки не будут привязаны к списку, но останутся во "Все".`);
+    const confirmed = window.confirm(t("notes.deleteListConfirm", { title: list.title }));
     if (!confirmed) return;
     await deleteList(list.id);
     setDetailView(null);
@@ -215,6 +218,7 @@ export default function NotesApp() {
       {detailView ? (
         <ListDetail
           activeTitle={activeTitle}
+          locale={locale}
           notes={visibleNotes}
           lists={lists}
           onBack={() => setDetailView(null)}
@@ -227,6 +231,7 @@ export default function NotesApp() {
       ) : (
         <HomeScreen
           connection={connection}
+          locale={locale}
           lists={lists}
           notes={notes}
           onCreateList={() => setListModalOpen(true)}
@@ -241,6 +246,7 @@ export default function NotesApp() {
           mode={editingId ? "edit" : "create"}
           form={noteForm}
           lists={lists}
+          locale={locale}
           onAddReminder={addReminder}
           onClose={closeNoteModal}
           onRemoveReminder={removeReminder}
@@ -261,6 +267,7 @@ export default function NotesApp() {
       {activeNote ? (
         <InfoModal
           list={lists.find((item) => item.id === activeNote.listId)}
+          locale={locale}
           note={activeNote}
           onClose={() => setInfoNoteId(null)}
           onDelete={() => removeNote(activeNote)}
@@ -273,6 +280,7 @@ export default function NotesApp() {
 
 type HomeScreenProps = {
   connection: ConnectionState;
+  locale: AppLocale;
   lists: ReminderList[];
   notes: Note[];
   onCreateList: () => void;
@@ -282,6 +290,8 @@ type HomeScreenProps = {
 };
 
 function HomeScreen({ connection, lists, notes, onCreateList, onCreateNote, onDeleteList, onOpenList }: HomeScreenProps) {
+  const { t } = useUserContext();
+
   return (
     <>
       <header className="home-topbar">
@@ -291,9 +301,9 @@ function HomeScreen({ connection, lists, notes, onCreateList, onCreateNote, onDe
           <span>local</span>
         </div>
         <div className="top-actions">
-          <button className="round-button search-button" type="button" aria-label="Поиск">⌕</button>
-          <button className="round-button list-create-button" type="button" aria-label="Создать список" onClick={onCreateList}>▦</button>
-          <button className="round-button primary-add-button" type="button" aria-label="Создать заметку" onClick={onCreateNote}>+</button>
+          <button className="round-button search-button" type="button" aria-label={t("app.common.search")}>⌕</button>
+          <button className="round-button list-create-button" type="button" aria-label={t("notes.createList")} onClick={onCreateList}>▦</button>
+          <button className="round-button primary-add-button" type="button" aria-label={t("notes.createNote")} onClick={onCreateNote}>+</button>
         </div>
       </header>
 
@@ -302,13 +312,13 @@ function HomeScreen({ connection, lists, notes, onCreateList, onCreateNote, onDe
           <button key={list.id} className={`smart-card ${list.tone}`} type="button" onClick={() => onOpenList(list.id)}>
             <span className="smart-icon">{list.icon}</span>
             <strong>{getSmartCount(list.id, notes)}</strong>
-            <span>{list.title}</span>
+            <span>{t(list.titleKey)}</span>
           </button>
         ))}
       </div>
 
       <section className="my-lists-section">
-        <h1>Мои списки</h1>
+        <h1>{t("notes.myLists")}</h1>
         <div className="ios-list-card">
           {lists.map((list) => (
             <div className="ios-list-row" key={list.id}>
@@ -318,7 +328,7 @@ function HomeScreen({ connection, lists, notes, onCreateList, onCreateNote, onDe
                 <strong>{getListCount(list.id, notes)}</strong>
                 <span className="chevron">›</span>
               </button>
-              <button className="row-delete" type="button" aria-label={`Удалить ${list.title}`} onClick={() => onDeleteList(list)}>×</button>
+              <button className="row-delete" type="button" aria-label={t("notes.deleteListLabel", { title: list.title })} onClick={() => onDeleteList(list)}>×</button>
             </div>
           ))}
         </div>
@@ -329,6 +339,7 @@ function HomeScreen({ connection, lists, notes, onCreateList, onCreateNote, onDe
 
 type ListDetailProps = {
   activeTitle: string;
+  locale: AppLocale;
   notes: Note[];
   lists: ReminderList[];
   onBack: () => void;
@@ -339,35 +350,37 @@ type ListDetailProps = {
   onInfo: (id: string) => void;
 };
 
-function ListDetail({ activeTitle, notes, lists, onBack, onCreate, onCreateList, onComplete, onEdit, onInfo }: ListDetailProps) {
+function ListDetail({ activeTitle, locale, notes, lists, onBack, onCreate, onCreateList, onComplete, onEdit, onInfo }: ListDetailProps) {
+  const { t } = useUserContext();
+
   return (
     <section className="detail-screen">
       <header className="detail-topbar">
         <button className="back-button" type="button" onClick={onBack}>‹</button>
         <h1>{activeTitle}</h1>
         <div className="top-actions">
-          <button className="round-button search-button" type="button" aria-label="Поиск">⌕</button>
-          <button className="round-button list-create-button" type="button" aria-label="Создать список" onClick={onCreateList}>▦</button>
-          <button className="round-button primary-add-button" type="button" aria-label="Создать заметку" onClick={onCreate}>+</button>
+          <button className="round-button search-button" type="button" aria-label={t("app.common.search")}>⌕</button>
+          <button className="round-button list-create-button" type="button" aria-label={t("notes.createList")} onClick={onCreateList}>▦</button>
+          <button className="round-button primary-add-button" type="button" aria-label={t("notes.createNote")} onClick={onCreate}>+</button>
         </div>
       </header>
 
       <div className="task-list compact-list">
         {notes.length === 0 ? (
-          <div className="empty-state">В этом списке пока пусто.</div>
+          <div className="empty-state">{t("notes.emptyList")}</div>
         ) : (
           notes.map((note) => {
             const list = lists.find((item) => item.id === note.listId);
             return (
               <article className={`task-row ${note.completed ? "completed" : ""}`} key={note.id}>
-                <button className="complete-toggle" type="button" aria-label="Завершить" onClick={() => onComplete(note)}>{note.completed ? "✓" : ""}</button>
+                <button className="complete-toggle" type="button" aria-label={t("notes.complete")} onClick={() => onComplete(note)}>{note.completed ? "\u2713" : ""}</button>
                 <button className="task-text" type="button" onClick={() => onEdit(note)}>
                   <span>{note.title}</span>
                   {note.body ? <small>{note.body}</small> : null}
-                  {note.reminders.length > 0 ? <em>{note.reminders.map(formatReminder).join(" · ")}</em> : null}
+                  {note.reminders.length > 0 ? <em>{note.reminders.map((reminder) => formatReminder(reminder, locale)).join(" · ")}</em> : null}
                   {list ? <i>{list.icon} {list.title}</i> : null}
                 </button>
-                <button className="info-button" type="button" aria-label="Информация" onClick={() => onInfo(note.id)}>i</button>
+                <button className="info-button" type="button" aria-label={t("app.common.info")} onClick={() => onInfo(note.id)}>i</button>
               </article>
             );
           })
@@ -381,6 +394,7 @@ function ListDetail({ activeTitle, notes, lists, onBack, onCreate, onCreateList,
 type NoteModalProps = {
   mode: ModalMode;
   form: typeof emptyNoteForm;
+  locale: AppLocale;
   lists: ReminderList[];
   onAddReminder: () => void;
   onClose: () => void;
@@ -389,29 +403,31 @@ type NoteModalProps = {
   setForm: React.Dispatch<React.SetStateAction<typeof emptyNoteForm>>;
 };
 
-function NoteModal({ mode, form, lists, onAddReminder, onClose, onRemoveReminder, onSubmit, setForm }: NoteModalProps) {
+function NoteModal({ mode, form, locale, lists, onAddReminder, onClose, onRemoveReminder, onSubmit, setForm }: NoteModalProps) {
+  const { t } = useUserContext();
+
   return (
     <div className="modal-backdrop" role="presentation">
       <form className="modal-sheet" onSubmit={onSubmit}>
         <div className="modal-header">
-          <button className="text-button" type="button" onClick={onClose}>Отмена</button>
-          <h2>{mode === "edit" ? "Заметка" : "Новая заметка"}</h2>
-          <button className="text-button primary" type="submit">Готово</button>
+          <button className="text-button" type="button" onClick={onClose}>{t("app.common.cancel")}</button>
+          <h2>{mode === "edit" ? t("notes.note") : t("notes.newNote")}</h2>
+          <button className="text-button primary" type="submit">{t("app.common.done")}</button>
         </div>
-        <input aria-label="Название заметки" autoFocus placeholder="Название" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
-        <textarea aria-label="Текст заметки" placeholder="Заметка" value={form.body} onChange={(event) => setForm((current) => ({ ...current, body: event.target.value }))} />
+        <input aria-label={t("notes.titleLabel")} autoFocus placeholder={t("notes.titlePlaceholder")} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
+        <textarea aria-label={t("notes.bodyLabel")} placeholder={t("notes.bodyPlaceholder")} value={form.body} onChange={(event) => setForm((current) => ({ ...current, body: event.target.value }))} />
         <select value={form.listId} onChange={(event) => setForm((current) => ({ ...current, listId: event.target.value }))}>
-          <option value="">— Без списка</option>
+          <option value="">-- {t("notes.noList")}</option>
           {lists.map((list) => <option key={list.id} value={list.id}>{list.icon} {list.title}</option>)}
         </select>
         <div className="date-row">
           <input type="datetime-local" value={form.reminderDraft} onChange={(event) => setForm((current) => ({ ...current, reminderDraft: event.target.value }))} />
-          <button className="secondary-button" type="button" onClick={onAddReminder}>Добавить дату</button>
+          <button className="secondary-button" type="button" onClick={onAddReminder}>{t("notes.addDate")}</button>
         </div>
         {form.reminders.length > 0 ? (
           <div className="chips">
             {form.reminders.map((reminder) => (
-              <button className="chip" key={reminder} type="button" onClick={() => onRemoveReminder(reminder)}>{formatReminder(reminder)} ×</button>
+              <button className="chip" key={reminder} type="button" onClick={() => onRemoveReminder(reminder)}>{formatReminder(reminder, locale)} x</button>
             ))}
           </div>
         ) : null}
@@ -428,19 +444,21 @@ type ListModalProps = {
 };
 
 function ListModal({ form, onClose, onSubmit, setForm }: ListModalProps) {
+  const { t } = useUserContext();
+
   return (
     <div className="modal-backdrop" role="presentation">
       <form className="modal-sheet small" onSubmit={onSubmit}>
         <div className="modal-header">
-          <button className="text-button" type="button" onClick={onClose}>Отмена</button>
-          <h2>Новый список</h2>
-          <button className="text-button primary" type="submit">Готово</button>
+          <button className="text-button" type="button" onClick={onClose}>{t("app.common.cancel")}</button>
+          <h2>{t("notes.newList")}</h2>
+          <button className="text-button primary" type="submit">{t("app.common.done")}</button>
         </div>
         <label className="emoji-field">
           <span style={{ backgroundColor: form.color }}>{form.icon || "•"}</span>
-          <input aria-label="Эмодзи списка" maxLength={4} placeholder="Эмодзи" value={form.icon} onChange={(event) => setForm((current) => ({ ...current, icon: event.target.value }))} />
+          <input aria-label={t("notes.emojiLabel")} maxLength={4} placeholder={t("notes.emojiPlaceholder")} value={form.icon} onChange={(event) => setForm((current) => ({ ...current, icon: event.target.value }))} />
         </label>
-        <input aria-label="Название списка" autoFocus placeholder="Название списка" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
+        <input aria-label={t("notes.listTitleLabel")} autoFocus placeholder={t("notes.listTitlePlaceholder")} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
         <div className="swatches">
           {listColors.map((color) => (
             <button className={form.color === color ? "swatch active" : "swatch"} key={color} style={{ backgroundColor: color }} type="button" onClick={() => setForm((current) => ({ ...current, color }))} />
@@ -453,31 +471,34 @@ function ListModal({ form, onClose, onSubmit, setForm }: ListModalProps) {
 
 type InfoModalProps = {
   list?: ReminderList;
+  locale: AppLocale;
   note: Note;
   onClose: () => void;
   onDelete: () => void;
   onEdit: () => void;
 };
 
-function InfoModal({ list, note, onClose, onDelete, onEdit }: InfoModalProps) {
+function InfoModal({ list, locale, note, onClose, onDelete, onEdit }: InfoModalProps) {
+  const { t } = useUserContext();
+
   return (
     <div className="modal-backdrop" role="presentation">
       <div className="modal-sheet small">
         <div className="modal-header">
-          <button className="text-button" type="button" onClick={onClose}>Закрыть</button>
-          <h2>Информация</h2>
+          <button className="text-button" type="button" onClick={onClose}>{t("app.common.close")}</button>
+          <h2>{t("app.common.info")}</h2>
           <span />
         </div>
         <div className="info-block">
           <strong>{note.title}</strong>
           {note.body ? <p>{note.body}</p> : null}
-          <span>{list ? `${list.icon} ${list.title}` : "Без списка"}</span>
+          <span>{list ? `${list.icon} ${list.title}` : t("notes.noList")}</span>
           <span>{note.syncStatus}</span>
-          {note.reminders.map((reminder) => <span key={reminder}>{formatReminder(reminder)}</span>)}
+          {note.reminders.map((reminder) => <span key={reminder}>{formatReminder(reminder, locale)}</span>)}
         </div>
         <div className="modal-actions">
-          <button className="secondary-button" type="button" onClick={onEdit}>Редактировать</button>
-          <button className="danger-button" type="button" onClick={onDelete}>Удалить</button>
+          <button className="secondary-button" type="button" onClick={onEdit}>{t("app.common.edit")}</button>
+          <button className="danger-button" type="button" onClick={onDelete}>{t("app.common.delete")}</button>
         </div>
       </div>
     </div>
@@ -501,13 +522,13 @@ function getListCount(listId: string, notes: Note[]): number {
   return notes.filter((note) => !note.deleted && !note.completed && note.listId === listId).length;
 }
 
-function getViewTitle(view: ViewId, lists: ReminderList[]): string {
-  if (view === "today") return "Сегодня";
-  if (view === "planned") return "В планах";
-  if (view === "all") return "Все";
-  if (view === "completed") return "Завершено";
-  if (view.startsWith("list:")) return lists.find((list) => list.id === view.slice(5))?.title ?? "Список";
-  return "Список";
+function getViewTitle(view: ViewId, lists: ReminderList[], t: (key: MessageKey, values?: Record<string, string | number>) => string): string {
+  if (view === "today") return t("notes.smart.today");
+  if (view === "planned") return t("notes.smart.planned");
+  if (view === "all") return t("notes.smart.all");
+  if (view === "completed") return t("notes.smart.completed");
+  if (view.startsWith("list:")) return lists.find((list) => list.id === view.slice(5))?.title ?? t("notes.listFallback");
+  return t("notes.listFallback");
 }
 
 function isTodayReminder(value: string): boolean {
@@ -516,8 +537,8 @@ function isTodayReminder(value: string): boolean {
   return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
 }
 
-function formatReminder(value: string): string {
-  return new Intl.DateTimeFormat("ru-RU", {
+function formatReminder(value: string, locale: AppLocale): string {
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
     day: "2-digit",
     month: "short",
     hour: "2-digit",

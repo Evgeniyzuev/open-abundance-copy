@@ -12,18 +12,20 @@ import {
   saveTask
 } from "@/lib/tasksStore";
 import type { TaskCompletion, TaskItem, TaskSchedule } from "@/lib/tasksStore";
+import { useUserContext } from "@/components/UserProvider";
+import type { AppLocale, MessageKey } from "@/lib/i18n";
 
 type ScheduleType = "once" | "daily" | "weekdays";
 
 const weekdayOptions = [
-  { value: 1, label: "Пн" },
-  { value: 2, label: "Вт" },
-  { value: 3, label: "Ср" },
-  { value: 4, label: "Чт" },
-  { value: 5, label: "Пт" },
-  { value: 6, label: "Сб" },
-  { value: 7, label: "Вс" }
-];
+  { value: 1, labelKey: "tasks.weekday.mon" },
+  { value: 2, labelKey: "tasks.weekday.tue" },
+  { value: 3, labelKey: "tasks.weekday.wed" },
+  { value: 4, labelKey: "tasks.weekday.thu" },
+  { value: 5, labelKey: "tasks.weekday.fri" },
+  { value: 6, labelKey: "tasks.weekday.sat" },
+  { value: 7, labelKey: "tasks.weekday.sun" }
+] satisfies { value: number; labelKey: MessageKey }[];
 
 function todayKey(): string {
   return toDateKey(new Date());
@@ -55,6 +57,7 @@ const emptyTaskForm = {
 };
 
 export default function TasksApp() {
+  const { locale, t } = useUserContext();
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [completions, setCompletions] = useState<TaskCompletion[]>([]);
   const [form, setForm] = useState(emptyTaskForm);
@@ -115,7 +118,7 @@ export default function TasksApp() {
 
     if (task.schedule.type === "once") {
       setSelectedTaskId(null);
-      window.alert(`Готово: "${task.title}"`);
+      window.alert(t("tasks.alertDone", { title: task.title }));
       return;
     }
 
@@ -148,7 +151,7 @@ export default function TasksApp() {
   }
 
   async function removeTask(task: TaskItem) {
-    const confirmed = window.confirm(`Удалить задачу "${task.title}"? Она попадет в завершенные/удаленные.`);
+    const confirmed = window.confirm(t("tasks.deleteConfirm", { title: task.title }));
     if (!confirmed) return;
     await deleteTask(task.id);
     setSelectedTaskId(null);
@@ -156,7 +159,7 @@ export default function TasksApp() {
   }
 
   async function removeTaskForever(task: TaskItem) {
-    const confirmed = window.confirm(`Удалить задачу "${task.title}" окончательно? Это действие нельзя отменить.`);
+    const confirmed = window.confirm(t("tasks.deleteForeverConfirm", { title: task.title }));
     if (!confirmed) return;
     await purgeTask(task.id);
     setSelectedTaskId(null);
@@ -167,6 +170,7 @@ export default function TasksApp() {
     return (
       <TaskArchiveScreen
         completions={completions}
+        locale={locale}
         tasks={archiveTasks}
         today={today}
         onBack={() => setArchiveOpen(false)}
@@ -180,28 +184,28 @@ export default function TasksApp() {
       <header className="tasks-header">
         <div>
           <span>Checks</span>
-          <h1>Задачи</h1>
+          <h1>{t("tasks.title")}</h1>
         </div>
-        <button className="tasks-add-button" type="button" aria-label="Новая задача" onClick={() => setModalOpen(true)}>
+        <button className="tasks-add-button" type="button" aria-label={t("tasks.newTask")} onClick={() => setModalOpen(true)}>
           <Plus size={24} />
         </button>
       </header>
 
-      <TaskSection title="Сегодня" emptyText="На сегодня задач нет." tasks={todayTasks} completions={completions} today={today} onMarkToday={markToday} onOpen={setSelectedTaskId} />
+      <TaskSection title={t("tasks.today")} emptyText={t("tasks.todayEmpty")} tasks={todayTasks} completions={completions} today={today} onMarkToday={markToday} onOpen={setSelectedTaskId} />
 
       <section className="task-section">
         <button className="task-section-toggle" type="button" onClick={() => setOtherExpanded((value) => !value)}>
-          <span>Остальные</span>
+          <span>{t("tasks.other")}</span>
           <strong>{otherTasks.length}</strong>
         </button>
         {otherExpanded ? (
-          <TaskList emptyText="Остальных задач пока нет." tasks={otherTasks} completions={completions} today={today} onMarkToday={markToday} onOpen={setSelectedTaskId} />
+          <TaskList emptyText={t("tasks.otherEmpty")} tasks={otherTasks} completions={completions} today={today} onMarkToday={markToday} onOpen={setSelectedTaskId} />
         ) : null}
       </section>
 
       <section className="task-section">
         <button className="task-archive-link" type="button" onClick={() => setArchiveOpen(true)}>
-          <span>Завершенные и удаленные</span>
+          <span>{t("tasks.archive")}</span>
           <strong>{archiveTasks.length}</strong>
         </button>
       </section>
@@ -211,6 +215,7 @@ export default function TasksApp() {
         <TaskDetailModal
           task={selectedTask}
           completions={completions.filter((completion) => completion.taskId === selectedTask.id)}
+          locale={locale}
           today={today}
           onClose={() => setSelectedTaskId(null)}
           onDelete={() => removeTask(selectedTask)}
@@ -241,26 +246,30 @@ type TaskSectionProps = {
 type TaskArchiveScreenProps = {
   tasks: TaskItem[];
   completions: TaskCompletion[];
+  locale: AppLocale;
   today: string;
   onBack: () => void;
   onDeleteForever: (task: TaskItem) => void;
 };
 
-function TaskArchiveScreen({ tasks, completions, today, onBack, onDeleteForever }: TaskArchiveScreenProps) {
+function TaskArchiveScreen({ tasks, completions, locale, today, onBack, onDeleteForever }: TaskArchiveScreenProps) {
+  const { t } = useUserContext();
+
   return (
     <section className="tasks-screen task-archive-screen">
       <header className="task-archive-topbar">
-        <button className="back-button" type="button" onClick={onBack}>‹</button>
-        <h1>Завершенные и удаленные</h1>
+        <button className="back-button" type="button" onClick={onBack}>{"\u2039"}</button>
+        <h1>{t("tasks.archive")}</h1>
       </header>
 
       {tasks.length === 0 ? (
-        <div className="task-empty">Здесь пока ничего нет.</div>
+        <div className="task-empty">{t("tasks.archiveEmpty")}</div>
       ) : (
         <div className="task-panel-list">
           {tasks.map((task) => (
             <ArchiveTaskPanel
               completions={completions}
+              locale={locale}
               key={task.id}
               task={task}
               today={today}
@@ -303,7 +312,8 @@ type TaskPanelProps = {
 };
 
 function TaskPanel({ task, completions, today, onMarkToday, onOpen }: TaskPanelProps) {
-  const progress = getProgress(task, completions);
+  const { t } = useUserContext();
+  const progress = getProgress(task, completions, t);
   const doneToday = isCompletedOn(task.id, today, completions);
   const image = task.thumbnailDataUrl || task.imageUrl;
 
@@ -316,7 +326,7 @@ function TaskPanel({ task, completions, today, onMarkToday, onOpen }: TaskPanelP
             {task.title}
             {progress.label ? <em>{progress.label}</em> : null}
           </span>
-          {task.description ? <small>{task.description}</small> : task.subtasks.length > 0 ? <small>{task.subtasks.length} подзадач</small> : null}
+          {task.description ? <small>{task.description}</small> : task.subtasks.length > 0 ? <small>{t("tasks.subtasksCount", { count: task.subtasks.length })}</small> : null}
           {progress.percent !== null ? (
             <span className="task-progress">
               <span style={{ width: `${progress.percent}%` }} />
@@ -326,7 +336,7 @@ function TaskPanel({ task, completions, today, onMarkToday, onOpen }: TaskPanelP
       </button>
       {isDueOn(task, today) ? (
         <button className={doneToday ? "task-done-button done" : "task-done-button"} type="button" disabled={doneToday} onClick={onMarkToday}>
-          {doneToday ? "✓" : ""}
+          {doneToday ? "\u2713" : ""}
         </button>
       ) : null}
     </article>
@@ -336,12 +346,14 @@ function TaskPanel({ task, completions, today, onMarkToday, onOpen }: TaskPanelP
 type ArchiveTaskPanelProps = {
   task: TaskItem;
   completions: TaskCompletion[];
+  locale: AppLocale;
   today: string;
   onDeleteForever: () => void;
 };
 
-function ArchiveTaskPanel({ task, completions, today, onDeleteForever }: ArchiveTaskPanelProps) {
-  const progress = getProgress(task, completions);
+function ArchiveTaskPanel({ task, completions, locale, today, onDeleteForever }: ArchiveTaskPanelProps) {
+  const { t } = useUserContext();
+  const progress = getProgress(task, completions, t);
   const image = task.thumbnailDataUrl || task.imageUrl;
 
   return (
@@ -351,9 +363,9 @@ function ArchiveTaskPanel({ task, completions, today, onDeleteForever }: Archive
         <span className="task-panel-body">
           <span className="task-panel-title">
             {task.title}
-            <em>{task.deleted ? "Удалено" : "Завершено"}</em>
+            <em>{task.deleted ? t("tasks.deleted") : t("tasks.completed")}</em>
           </span>
-          <small>{getArchiveSubtitle(task, today, progress.label)}</small>
+          <small>{getArchiveSubtitle(task, today, progress.label, t)}</small>
           {progress.percent !== null ? (
             <span className="task-progress">
               <span style={{ width: `${progress.percent}%` }} />
@@ -361,7 +373,7 @@ function ArchiveTaskPanel({ task, completions, today, onDeleteForever }: Archive
           ) : null}
         </span>
       </div>
-      <button className="task-forever-delete-button" type="button" aria-label="Удалить окончательно" onClick={onDeleteForever}>
+      <button className="task-forever-delete-button" type="button" aria-label={t("tasks.deleteForever")} onClick={onDeleteForever}>
         <Trash2 size={18} />
       </button>
     </article>
@@ -376,6 +388,7 @@ type TaskModalProps = {
 };
 
 function TaskModal({ form, setForm, onClose, onSubmit }: TaskModalProps) {
+  const { t } = useUserContext();
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file?: File) {
@@ -388,19 +401,19 @@ function TaskModal({ form, setForm, onClose, onSubmit }: TaskModalProps) {
     <div className="modal-backdrop" role="presentation">
       <form className="modal-sheet task-modal" onSubmit={onSubmit}>
         <div className="modal-header">
-          <button className="text-button" type="button" onClick={onClose}>Отмена</button>
-          <h2>Новая задача</h2>
-          <button className="text-button primary" type="submit">Готово</button>
+          <button className="text-button" type="button" onClick={onClose}>{t("app.common.cancel")}</button>
+          <h2>{t("tasks.newTask")}</h2>
+          <button className="text-button primary" type="submit">{t("app.common.done")}</button>
         </div>
 
-        <input aria-label="Название задачи" autoFocus placeholder="Название" value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
-        <textarea aria-label="Описание задачи" placeholder="Описание" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
+        <input aria-label={t("tasks.titleLabel")} autoFocus placeholder={t("tasks.titlePlaceholder")} value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} />
+        <textarea aria-label={t("tasks.descriptionLabel")} placeholder={t("tasks.descriptionPlaceholder")} value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
 
         <div className="subtask-editor">
           <div className="subtask-input-row">
             <input
-              aria-label="Подзадача"
-              placeholder="Подзадача"
+              aria-label={t("tasks.subtaskLabel")}
+              placeholder={t("tasks.subtaskPlaceholder")}
               value={form.subtaskTitle}
               onChange={(event) => setForm((current) => ({ ...current, subtaskTitle: event.target.value }))}
             />
@@ -424,20 +437,20 @@ function TaskModal({ form, setForm, onClose, onSubmit }: TaskModalProps) {
             <Link size={16} /> URL
           </button>
           <button className={form.imageMode === "upload" ? "mode-button active" : "mode-button"} type="button" onClick={() => fileRef.current?.click()}>
-            <ImagePlus size={16} /> Файл
+            <ImagePlus size={16} /> {t("tasks.file")}
           </button>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={(event) => handleFile(event.target.files?.[0])} />
         </div>
 
         {form.imageMode === "url" ? (
-          <input aria-label="Ссылка на изображение" placeholder="Ссылка на изображение" value={form.imageUrl} onChange={(event) => setForm((current) => ({ ...current, imageUrl: event.target.value }))} />
+          <input aria-label={t("tasks.imageUrlLabel")} placeholder={t("tasks.imageUrlPlaceholder")} value={form.imageUrl} onChange={(event) => setForm((current) => ({ ...current, imageUrl: event.target.value }))} />
         ) : null}
         {form.thumbnailDataUrl ? <img className="task-image-preview" alt="" src={form.thumbnailDataUrl} /> : null}
 
         <div className="task-modal-row">
           {(["once", "daily", "weekdays"] as ScheduleType[]).map((type) => (
             <button className={form.scheduleType === type ? "mode-button active" : "mode-button"} key={type} type="button" onClick={() => setForm((current) => ({ ...current, scheduleType: type }))}>
-              {getScheduleTypeLabel(type)}
+              {getScheduleTypeLabel(type, t)}
             </button>
           ))}
         </div>
@@ -453,7 +466,7 @@ function TaskModal({ form, setForm, onClose, onSubmit }: TaskModalProps) {
                 type="button"
                 onClick={() => setForm((current) => ({ ...current, weekdays: toggleWeekday(current.weekdays, day.value) }))}
               >
-                {day.label}
+                {t(day.labelKey)}
               </button>
             ))}
           </div>
@@ -462,7 +475,7 @@ function TaskModal({ form, setForm, onClose, onSubmit }: TaskModalProps) {
         {form.scheduleType !== "once" ? (
           <div className="duration-row">
             <input
-              aria-label="Количество дней"
+              aria-label={t("tasks.daysCountLabel")}
               disabled={form.infinite}
               min={1}
               type="number"
@@ -471,7 +484,7 @@ function TaskModal({ form, setForm, onClose, onSubmit }: TaskModalProps) {
             />
             <label>
               <input type="checkbox" checked={form.infinite} onChange={(event) => setForm((current) => ({ ...current, infinite: event.target.checked }))} />
-              Бесконечно дней
+              {t("tasks.infiniteDays")}
             </label>
           </div>
         ) : null}
@@ -483,16 +496,18 @@ function TaskModal({ form, setForm, onClose, onSubmit }: TaskModalProps) {
 type TaskDetailModalProps = {
   task: TaskItem;
   completions: TaskCompletion[];
+  locale: AppLocale;
   today: string;
   onClose: () => void;
   onDelete: () => void;
   onDone: () => void;
 };
 
-function TaskDetailModal({ task, completions, today, onClose, onDelete, onDone }: TaskDetailModalProps) {
+function TaskDetailModal({ task, completions, locale, today, onClose, onDelete, onDone }: TaskDetailModalProps) {
+  const { t } = useUserContext();
   const image = task.thumbnailDataUrl || task.imageUrl;
   const doneToday = isCompletedOn(task.id, today, completions);
-  const progress = getProgress(task, completions);
+  const progress = getProgress(task, completions, t);
   const [checkedSubtasks, setCheckedSubtasks] = useState<Set<number>>(new Set());
 
   function toggleSubtask(index: number) {
@@ -508,9 +523,9 @@ function TaskDetailModal({ task, completions, today, onClose, onDelete, onDone }
     <div className="modal-backdrop" role="presentation">
       <div className="modal-sheet task-detail-modal">
         <div className="modal-header">
-          <button className="text-button" type="button" onClick={onClose}>Закрыть</button>
-          <h2>Задача</h2>
-          <button className="text-button primary danger-icon-button" type="button" aria-label="Удалить задачу" onClick={onDelete}><Trash2 size={18} /></button>
+          <button className="text-button" type="button" onClick={onClose}>{t("app.common.close")}</button>
+          <h2>{t("tasks.task")}</h2>
+          <button className="text-button primary danger-icon-button" type="button" aria-label={t("tasks.deleteTask")} onClick={onDelete}><Trash2 size={18} /></button>
         </div>
         {image ? <img className="task-detail-image" alt="" src={image} /> : null}
         <div className="task-detail-body">
@@ -522,18 +537,18 @@ function TaskDetailModal({ task, completions, today, onClose, onDelete, onDone }
             <ul className="task-detail-subtasks">
               {task.subtasks.map((subtask, index) => (
                 <li className={checkedSubtasks.has(index) ? "done" : ""} key={`${subtask}-${index}`}>
-                  <button className="subtask-check-button" type="button" aria-label="Отметить подзадачу" onClick={() => toggleSubtask(index)}>
-                    {checkedSubtasks.has(index) ? "✓" : ""}
+                  <button className="subtask-check-button" type="button" aria-label={t("tasks.completeSubtask")} onClick={() => toggleSubtask(index)}>
+                    {checkedSubtasks.has(index) ? "\u2713" : ""}
                   </button>
                   <span>{subtask}</span>
                 </li>
               ))}
             </ul>
           ) : null}
-          <TaskMonthCalendar task={task} completions={completions} today={today} />
+          <TaskMonthCalendar task={task} completions={completions} locale={locale} today={today} />
           {isDueOn(task, today) ? (
             <button className="task-done-primary-button" type="button" disabled={doneToday} onClick={onDone}>
-              {doneToday ? "Done today ✓" : "Done ✓"}
+              {doneToday ? t("tasks.doneToday") : t("tasks.doneAction")}
             </button>
           ) : null}
         </div>
@@ -549,22 +564,25 @@ type StreakCompleteModalProps = {
 };
 
 function StreakCompleteModal({ task, onExtend, onFinish }: StreakCompleteModalProps) {
+  const { t } = useUserContext();
+
   return (
     <div className="modal-backdrop" role="presentation">
       <div className="modal-sheet small streak-complete-modal">
-        <div className="streak-complete-icon">✓</div>
-        <h2>Стрик завершен</h2>
+        <div className="streak-complete-icon">{"\u2713"}</div>
+        <h2>{t("tasks.streakComplete")}</h2>
         <p>{task.title}</p>
         <div className="modal-actions">
-          <button className="secondary-button" type="button" onClick={onExtend}>Продлить</button>
-          <button className="task-done-primary-button" type="button" onClick={onFinish}>Завершить</button>
+          <button className="secondary-button" type="button" onClick={onExtend}>{t("tasks.extend")}</button>
+          <button className="task-done-primary-button" type="button" onClick={onFinish}>{t("tasks.finish")}</button>
         </div>
       </div>
     </div>
   );
 }
 
-function TaskMonthCalendar({ task, completions, today }: { task: TaskItem; completions: TaskCompletion[]; today: string }) {
+function TaskMonthCalendar({ task, completions, locale, today }: { task: TaskItem; completions: TaskCompletion[]; locale: AppLocale; today: string }) {
+  const { t } = useUserContext();
   const [visibleMonth, setVisibleMonth] = useState(() => getInitialCalendarMonth(task, completions, today));
   const days = getCalendarMonthDays(visibleMonth);
   const previousMonth = shiftMonth(visibleMonth, -1);
@@ -575,17 +593,17 @@ function TaskMonthCalendar({ task, completions, today }: { task: TaskItem; compl
   return (
     <section className="task-calendar">
       <div className="task-calendar-header">
-        <button type="button" aria-label="Предыдущий месяц" disabled={!canGoPrevious} onClick={() => setVisibleMonth(previousMonth)}>
+        <button type="button" aria-label={t("tasks.previousMonth")} disabled={!canGoPrevious} onClick={() => setVisibleMonth(previousMonth)}>
           <ChevronLeft size={18} />
         </button>
-        <strong>{formatMonthTitle(visibleMonth)}</strong>
-        <button type="button" aria-label="Следующий месяц" disabled={!canGoNext} onClick={() => setVisibleMonth(nextMonth)}>
+        <strong>{formatMonthTitle(visibleMonth, locale)}</strong>
+        <button type="button" aria-label={t("tasks.nextMonth")} disabled={!canGoNext} onClick={() => setVisibleMonth(nextMonth)}>
           <ChevronRight size={18} />
         </button>
       </div>
       <div className="task-calendar-weekdays">
         {weekdayOptions.map((day) => (
-          <span key={day.value}>{day.label}</span>
+          <span key={day.value}>{t(day.labelKey)}</span>
         ))}
       </div>
       <div className="task-calendar-grid">
@@ -703,36 +721,36 @@ function monthHasCalendarActivity(task: TaskItem, completions: TaskCompletion[],
   return getCalendarMonthDays(month).some((day) => day.startsWith(month) && isPlannedOn(task, day));
 }
 
-function formatMonthTitle(month: string): string {
+function formatMonthTitle(month: string, locale: AppLocale): string {
   const [year, monthIndex] = month.split("-").map(Number);
-  return new Intl.DateTimeFormat("ru", { month: "long", year: "numeric" }).format(new Date(year, monthIndex - 1, 1));
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { month: "long", year: "numeric" }).format(new Date(year, monthIndex - 1, 1));
 }
 
 function isCompletedOn(taskId: string, day: string, completions: TaskCompletion[]): boolean {
   return completions.some((completion) => completion.taskId === taskId && completion.localDate === day);
 }
 
-function getProgress(task: TaskItem, completions: TaskCompletion[]): { label: string | null; percent: number | null } {
+function getProgress(task: TaskItem, completions: TaskCompletion[], t: (key: MessageKey, values?: Record<string, string | number>) => string): { label: string | null; percent: number | null } {
   if (task.schedule.type === "once") return { label: null, percent: null };
   const completedDays = completions.filter((completion) => completion.taskId === task.id).length;
-  if (task.schedule.infinite || !task.schedule.targetDays) return { label: `${completedDays} дней`, percent: null };
+  if (task.schedule.infinite || !task.schedule.targetDays) return { label: t("tasks.days", { count: completedDays }), percent: null };
   return {
     label: `${completedDays}/${task.schedule.targetDays}`,
     percent: Math.min(100, Math.round((completedDays / task.schedule.targetDays) * 100))
   };
 }
 
-function getArchiveSubtitle(task: TaskItem, today: string, progressLabel: string | null): string {
-  if (task.deleted) return "Можно удалить окончательно";
+function getArchiveSubtitle(task: TaskItem, today: string, progressLabel: string | null, t: (key: MessageKey, values?: Record<string, string | number>) => string): string {
+  if (task.deleted) return t("tasks.deleteAvailable");
   if (progressLabel) return progressLabel;
-  if (isDueOn(task, today)) return "Была запланирована на сегодня";
-  return "Задача завершена";
+  if (isDueOn(task, today)) return t("tasks.plannedToday");
+  return t("tasks.completedSubtitle");
 }
 
-function getScheduleTypeLabel(type: ScheduleType): string {
-  if (type === "once") return "Разовая";
-  if (type === "weekdays") return "Дни недели";
-  return "Ежедневно";
+function getScheduleTypeLabel(type: ScheduleType, t: (key: MessageKey, values?: Record<string, string | number>) => string): string {
+  if (type === "once") return t("tasks.schedule.once");
+  if (type === "weekdays") return t("tasks.schedule.weekdays");
+  return t("tasks.schedule.daily");
 }
 
 function toggleWeekday(days: number[], day: number): number[] {
