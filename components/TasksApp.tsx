@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { CheckSquare, ImagePlus, Link, Plus, Trash2 } from "lucide-react";
+import { CheckSquare, ChevronLeft, ChevronRight, ImagePlus, Link, Plus, Trash2 } from "lucide-react";
 import {
   completeTask,
   completeTaskDay,
@@ -32,6 +32,11 @@ function todayKey(): string {
 function toDateKey(date: Date): string {
   const offset = date.getTimezoneOffset();
   return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
+}
+
+function parseDateKey(day: string): Date {
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(year, month - 1, date);
 }
 
 const emptyTaskForm = {
@@ -525,7 +530,7 @@ function TaskDetailModal({ task, completions, today, onClose, onDelete, onDone }
               ))}
             </ul>
           ) : null}
-          <WeekPreview task={task} completions={completions} />
+          <TaskMonthCalendar task={task} completions={completions} today={today} />
           {isDueOn(task, today) ? (
             <button className="task-done-primary-button" type="button" disabled={doneToday} onClick={onDone}>
               {doneToday ? "Done today ✓" : "Done ✓"}
@@ -559,21 +564,46 @@ function StreakCompleteModal({ task, onExtend, onFinish }: StreakCompleteModalPr
   );
 }
 
-function WeekPreview({ task, completions }: { task: TaskItem; completions: TaskCompletion[] }) {
-  const days = Array.from({ length: 14 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() + index);
-    return toDateKey(date);
-  });
+function TaskMonthCalendar({ task, completions, today }: { task: TaskItem; completions: TaskCompletion[]; today: string }) {
+  const [visibleMonth, setVisibleMonth] = useState(() => getInitialCalendarMonth(task, completions, today));
+  const days = getCalendarMonthDays(visibleMonth);
+  const previousMonth = shiftMonth(visibleMonth, -1);
+  const nextMonth = shiftMonth(visibleMonth, 1);
+  const canGoPrevious = monthHasCalendarActivity(task, completions, previousMonth);
+  const canGoNext = monthHasCalendarActivity(task, completions, nextMonth);
 
   return (
-    <div className="week-preview">
+    <section className="task-calendar">
+      <div className="task-calendar-header">
+        <button type="button" aria-label="Предыдущий месяц" disabled={!canGoPrevious} onClick={() => setVisibleMonth(previousMonth)}>
+          <ChevronLeft size={18} />
+        </button>
+        <strong>{formatMonthTitle(visibleMonth)}</strong>
+        <button type="button" aria-label="Следующий месяц" disabled={!canGoNext} onClick={() => setVisibleMonth(nextMonth)}>
+          <ChevronRight size={18} />
+        </button>
+      </div>
+      <div className="task-calendar-weekdays">
+        {weekdayOptions.map((day) => (
+          <span key={day.value}>{day.label}</span>
+        ))}
+      </div>
+      <div className="task-calendar-grid">
       {days.map((day) => {
-        const due = isDueOn(task, day);
+        const inMonth = day.startsWith(visibleMonth);
+        const due = isPlannedOn(task, day);
         const done = isCompletedOn(task.id, day, completions);
-        return <span className={done ? "done" : due ? "due" : ""} key={day}>{new Date(day).getDate()}</span>;
+        const className = [
+          "task-calendar-day",
+          inMonth ? "" : "outside",
+          due ? "due" : "",
+          done ? "done" : ""
+        ].filter(Boolean).join(" ");
+
+        return <span className={className} key={day}>{parseDateKey(day).getDate()}</span>;
       })}
     </div>
+    </section>
   );
 }
 
@@ -594,15 +624,88 @@ function extendTaskSchedule(schedule: TaskSchedule): TaskSchedule {
 
 function isDueOn(task: TaskItem, day: string): boolean {
   if (task.completed) return false;
+  return isPlannedOn(task, day);
+}
+
+function isPlannedOn(task: TaskItem, day: string): boolean {
   if (task.schedule.type === "once") return task.schedule.date === day;
   if (task.schedule.startDate > day) return false;
-  if (task.schedule.type === "daily") return true;
-  return task.schedule.weekdays.includes(getIsoWeekday(day));
+  if (task.schedule.type === "daily") {
+    if (task.schedule.infinite || !task.schedule.targetDays) return true;
+    return daysBetween(task.schedule.startDate, day) < task.schedule.targetDays;
+  }
+
+  if (!task.schedule.weekdays.includes(getIsoWeekday(day))) return false;
+  if (task.schedule.infinite || !task.schedule.targetDays) return true;
+  return countPlannedDaysThrough(task, day) <= task.schedule.targetDays;
 }
 
 function getIsoWeekday(day: string): number {
-  const value = new Date(`${day}T00:00:00`).getDay();
+  const value = parseDateKey(day).getDay();
   return value === 0 ? 7 : value;
+}
+
+function daysBetween(from: string, to: string): number {
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.round((parseDateKey(to).getTime() - parseDateKey(from).getTime()) / dayMs);
+}
+
+function countPlannedDaysThrough(task: TaskItem, day: string): number {
+  if (task.schedule.type !== "weekdays") return 0;
+
+  let count = 0;
+  const cursor = parseDateKey(task.schedule.startDate);
+  const end = parseDateKey(day);
+
+  while (cursor <= end) {
+    if (task.schedule.weekdays.includes(getIsoWeekday(toDateKey(cursor)))) count += 1;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return count;
+}
+
+function getInitialCalendarMonth(task: TaskItem, completions: TaskCompletion[], today: string): string {
+  const todayMonth = getMonthKey(today);
+  if (monthHasCalendarActivity(task, completions, todayMonth)) return todayMonth;
+
+  const completion = completions[0]?.localDate;
+  if (completion) return getMonthKey(completion);
+
+  if (task.schedule.type === "once") return getMonthKey(task.schedule.date);
+  return getMonthKey(task.schedule.startDate);
+}
+
+function getMonthKey(day: string): string {
+  return day.slice(0, 7);
+}
+
+function shiftMonth(month: string, offset: number): string {
+  const [year, monthIndex] = month.split("-").map(Number);
+  return toDateKey(new Date(year, monthIndex - 1 + offset, 1)).slice(0, 7);
+}
+
+function getCalendarMonthDays(month: string): string[] {
+  const [year, monthIndex] = month.split("-").map(Number);
+  const firstDay = new Date(year, monthIndex - 1, 1);
+  const start = new Date(firstDay);
+  start.setDate(firstDay.getDate() - (getIsoWeekday(toDateKey(firstDay)) - 1));
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return toDateKey(date);
+  });
+}
+
+function monthHasCalendarActivity(task: TaskItem, completions: TaskCompletion[], month: string): boolean {
+  if (completions.some((completion) => completion.localDate.startsWith(month))) return true;
+  return getCalendarMonthDays(month).some((day) => day.startsWith(month) && isPlannedOn(task, day));
+}
+
+function formatMonthTitle(month: string): string {
+  const [year, monthIndex] = month.split("-").map(Number);
+  return new Intl.DateTimeFormat("ru", { month: "long", year: "numeric" }).format(new Date(year, monthIndex - 1, 1));
 }
 
 function isCompletedOn(taskId: string, day: string, completions: TaskCompletion[]): boolean {

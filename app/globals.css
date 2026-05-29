@@ -277,10 +277,17 @@ h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.05; letter-spacing: 0; }
 .streak-complete-modal h2 { margin: 0; font-size: 22px; }
 .streak-complete-modal p { margin: 0; color: var(--muted); font-size: 16px; }
 .streak-complete-icon { width: 64px; height: 64px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--green); color: white; font-size: 34px; font-weight: 900; box-shadow: 0 12px 26px rgba(52, 199, 89, 0.28); }
-.week-preview { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
-.week-preview span { aspect-ratio: 1; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #f1f2f7; color: var(--muted); font-size: 13px; font-weight: 850; }
-.week-preview span.due { background: #fff4de; color: #b26b00; }
-.week-preview span.done { background: #e7f8ed; color: var(--green); }
+.task-calendar { display: grid; gap: 8px; }
+.task-calendar-header { display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; align-items: center; gap: 8px; }
+.task-calendar-header strong { overflow: hidden; font-size: 16px; text-align: center; text-overflow: ellipsis; text-transform: capitalize; white-space: nowrap; }
+.task-calendar-header button { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #eef6ff; color: var(--blue); }
+.task-calendar-header button:disabled { background: #f1f2f7; color: var(--muted); opacity: 0.45; }
+.task-calendar-weekdays, .task-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.task-calendar-weekdays span { min-height: 22px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; font-weight: 850; }
+.task-calendar-day { aspect-ratio: 1; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; color: var(--text); font-size: 13px; font-weight: 850; }
+.task-calendar-day.outside { color: #c7c7cc; }
+.task-calendar-day.due { border: 2px solid #b26b00; color: #9b5a00; }
+.task-calendar-day.done { border-color: var(--green); background: var(--green); color: white; }
 @media (max-width: 620px) {
   .app-shell { padding: 0; }
   .app-content { padding-top: 78px; padding-bottom: 92px; }
