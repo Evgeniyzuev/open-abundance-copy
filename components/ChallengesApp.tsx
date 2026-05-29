@@ -44,7 +44,7 @@ type CheckChallengeResponse = {
 
 const ACCEPTED_CHALLENGES_CACHE_KEY = "open-abundance:accepted-challenges:v1";
 const LOCALE = "ru";
-const USER_LEVEL = 0;
+const DEFAULT_USER_LEVEL = 1;
 
 type ChallengesAppProps = {
   refreshNonce: number;
@@ -59,7 +59,8 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   const [completedOpen, setCompletedOpen] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const { user, refreshUserData } = useUserContext();
+  const { user, profile, core, refreshUserData } = useUserContext();
+  const userLevel = core?.level ?? profile?.level ?? DEFAULT_USER_LEVEL;
 
   useEffect(() => {
     if (!selectedChallenge && !completionReward) return;
@@ -170,6 +171,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       <>
         <ChallengeArchiveScreen
           challenges={completedChallenges}
+          userLevel={userLevel}
           onBack={() => {
             setCompletedOpen(false);
             setSelectedChallenge(null);
@@ -181,6 +183,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
           <ChallengeDetailModal
             challenge={selectedChallenge}
             isRegistered={Boolean(user)}
+            userLevel={userLevel}
             onAccept={() => acceptChallenge(selectedChallenge)}
             onClose={() => setSelectedChallenge(null)}
             onComplete={completeChallenge}
@@ -206,12 +209,12 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       {status === "loading" ? <ChallengeState title="Загрузка..." description="Готовим челленджи." /> : null}
       {status === "offline" ? <ChallengeState title="Нет подключения" description="Доступные челленджи видны только онлайн. Принятые появятся здесь после синхронизации." /> : null}
 
-      {acceptedChallenges.length > 0 ? (
-        <ChallengeSection challenges={acceptedChallenges} title="Принятые" onOpen={(challenge) => setSelectedChallenge(challenge)} />
+      {availableChallenges.length > 0 ? (
+        <ChallengeSection challenges={availableChallenges} title="Доступные" userLevel={userLevel} onOpen={(challenge) => setSelectedChallenge(challenge)} />
       ) : null}
 
-      {availableChallenges.length > 0 ? (
-        <ChallengeSection challenges={availableChallenges} title="Доступные" onOpen={(challenge) => setSelectedChallenge(challenge)} />
+      {acceptedChallenges.length > 0 ? (
+        <ChallengeSection challenges={acceptedChallenges} title="Принятые" userLevel={userLevel} onOpen={(challenge) => setSelectedChallenge(challenge)} />
       ) : null}
 
       {completedChallenges.length > 0 ? (
@@ -227,6 +230,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
         <ChallengeDetailModal
           challenge={selectedChallenge}
           isRegistered={Boolean(user)}
+          userLevel={userLevel}
           onAccept={() => acceptChallenge(selectedChallenge)}
           onClose={() => setSelectedChallenge(null)}
           onComplete={completeChallenge}
@@ -241,10 +245,12 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
 
 function ChallengeArchiveScreen({
   challenges,
+  userLevel,
   onBack,
   onOpen
 }: {
   challenges: Challenge[];
+  userLevel: number;
   onBack: () => void;
   onOpen: (challenge: Challenge) => void;
 }) {
@@ -260,7 +266,7 @@ function ChallengeArchiveScreen({
       ) : (
         <div className="challenge-list">
           {challenges.map((challenge) => (
-            <ChallengeRow challenge={challenge} key={challenge.id} userLevel={USER_LEVEL} onOpen={() => onOpen(challenge)} />
+            <ChallengeRow challenge={challenge} key={challenge.id} userLevel={userLevel} onOpen={() => onOpen(challenge)} />
           ))}
         </div>
       )}
@@ -268,13 +274,23 @@ function ChallengeArchiveScreen({
   );
 }
 
-function ChallengeSection({ challenges, title, onOpen }: { challenges: Challenge[]; title: string; onOpen: (challenge: Challenge) => void }) {
+function ChallengeSection({
+  challenges,
+  title,
+  userLevel,
+  onOpen
+}: {
+  challenges: Challenge[];
+  title: string;
+  userLevel: number;
+  onOpen: (challenge: Challenge) => void;
+}) {
   return (
     <section className="challenge-section">
       <h2>{title}</h2>
       <div className="challenge-list">
         {challenges.map((challenge) => (
-          <ChallengeRow challenge={challenge} key={challenge.id} userLevel={USER_LEVEL} onOpen={() => onOpen(challenge)} />
+          <ChallengeRow challenge={challenge} key={challenge.id} userLevel={userLevel} onOpen={() => onOpen(challenge)} />
         ))}
       </div>
     </section>
@@ -282,8 +298,9 @@ function ChallengeSection({ challenges, title, onOpen }: { challenges: Challenge
 }
 
 function ChallengeRow({ challenge, userLevel, onOpen }: { challenge: Challenge; userLevel: number; onOpen: () => void }) {
-  const locked = challenge.difficulty_level > userLevel;
+  const accepted = isActiveChallenge(challenge);
   const completed = challenge.user_challenge_status === "completed";
+  const locked = !accepted && !completed && challenge.difficulty_level > userLevel;
 
   return (
     <button className={locked ? "challenge-row locked" : "challenge-row"} type="button" onClick={onOpen}>
@@ -295,7 +312,7 @@ function ChallengeRow({ challenge, userLevel, onOpen }: { challenge: Challenge; 
         <small>{completed ? "Завершено" : text(challenge.description, "")}</small>
         <span className="challenge-meta">
           <span>{rewardText(challenge.reward_label)}</span>
-          <span>Lvl {challenge.difficulty_level}</span>
+          <span className={locked ? "challenge-level locked-level" : "challenge-level"}>Lvl {challenge.difficulty_level}</span>
           {challenge.duration_days ? <span>{challenge.duration_days} дн.</span> : null}
           {completed ? <span>Готово</span> : null}
         </span>
@@ -307,6 +324,7 @@ function ChallengeRow({ challenge, userLevel, onOpen }: { challenge: Challenge; 
 function ChallengeDetailModal({
   challenge,
   isRegistered,
+  userLevel,
   onAccept,
   onClose,
   onComplete,
@@ -314,14 +332,16 @@ function ChallengeDetailModal({
 }: {
   challenge: Challenge;
   isRegistered: boolean;
+  userLevel: number;
   onAccept: () => void;
   onClose: () => void;
   onComplete: (challenge: Challenge, reward: { amount: number; account: string; claimed: boolean }) => void;
   onRefreshUserData: () => Promise<void>;
 }) {
-  const locked = challenge.difficulty_level > USER_LEVEL;
   const signupChallenge = challenge.verification_logic === "signup";
   const completed = challenge.user_challenge_status === "completed";
+  const accepted = isActiveChallenge(challenge);
+  const locked = !accepted && challenge.difficulty_level > userLevel;
   const [authStatus, setAuthStatus] = useState<"idle" | "loading" | "error">("idle");
   const [checkStatus, setCheckStatus] = useState<"idle" | "loading" | "error">("idle");
   const [checkMessage, setCheckMessage] = useState<string | null>(null);
@@ -445,21 +465,27 @@ function ChallengeDetailModal({
             </div>
           ) : null}
 
-          {!completed && !isRegistered && signupChallenge ? (
+          {!completed && locked ? (
+            <div className="challenge-access locked">
+              Доступно с уровня {challenge.difficulty_level}
+            </div>
+          ) : null}
+
+          {!completed && !locked && !isRegistered && signupChallenge ? (
             <button className="challenge-primary-action" type="button" disabled={authStatus === "loading"} onClick={handleSignup}>
               {authStatus === "loading" ? "Открываем Google..." : "Войти через Google"}
             </button>
           ) : null}
 
-          {!completed && isRegistered ? (
-            <button className="challenge-primary-action" type="button" disabled={locked || checkStatus === "loading"} onClick={handleCheck}>
-              {checkStatus === "loading" ? "Проверяем..." : "Проверить и завершить"}
+          {!completed && !locked && accepted ? (
+            <button className="challenge-primary-action" type="button" disabled={checkStatus === "loading"} onClick={handleCheck}>
+              {checkStatus === "loading" ? "Проверяем..." : "check✅"}
             </button>
           ) : null}
 
-          {!completed && !signupChallenge && !isRegistered ? (
-            <button className={locked ? "challenge-access locked" : "challenge-primary-action"} type="button" disabled={locked} onClick={onAccept}>
-              {locked ? `Доступно с уровня ${challenge.difficulty_level}` : "Принять челлендж"}
+          {!completed && !locked && !accepted && (!signupChallenge || isRegistered) ? (
+            <button className="challenge-primary-action" type="button" onClick={onAccept}>
+              Принять челлендж
             </button>
           ) : null}
 

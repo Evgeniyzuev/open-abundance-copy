@@ -79,6 +79,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .challenge-row-body small { overflow: hidden; color: var(--muted); font-size: 13px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
 .challenge-meta { display: flex; flex-wrap: nowrap; gap: 6px; overflow: hidden; }
 .challenge-meta span { min-height: 24px; display: inline-flex; align-items: center; border-radius: 999px; padding: 0 8px; background: #eef6ff; color: var(--blue); font-size: 12px; font-weight: 800; }
+.challenge-meta span.locked-level { background: #fff0f0; color: var(--danger); }
 .challenge-state { min-height: 280px; display: grid; place-items: center; align-content: center; gap: 8px; padding: 28px; color: var(--muted); text-align: center; }
 .challenge-state svg { color: #c66a00; }
 .challenge-state strong { color: var(--text); font-size: 20px; }
@@ -95,7 +96,7 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .challenge-detail-grid span { min-height: 38px; display: flex; align-items: center; gap: 8px; border-radius: 12px; padding: 0 12px; background: #f8f8fb; color: var(--text); font-size: 14px; font-weight: 800; }
 .challenge-detail-grid svg { color: var(--blue); }
 .challenge-access { min-height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: #eef6ff; color: var(--blue); font-weight: 900; }
-.challenge-access.locked { background: #f1f2f7; color: var(--muted); }
+.challenge-access.locked { background: #fff0f0; color: var(--danger); }
 .challenge-access.completed { gap: 8px; background: #e7f8ed; color: var(--green); }
 .challenge-primary-action { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; border-radius: 14px; padding: 0 16px; background: var(--blue); color: white; font-weight: 900; box-shadow: 0 10px 24px rgba(10, 132, 255, 0.24); }
 .challenge-error { color: var(--danger) !important; font-size: 14px !important; }
