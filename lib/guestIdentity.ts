@@ -3,6 +3,14 @@ export type LocalGuestIdentity = {
   createdAt: string;
   lastSeenAt: string;
   claimedUserId?: string;
+  pendingReferral?: PendingReferral;
+};
+
+export type PendingReferral = {
+  referralCode: string;
+  capturedAt: string;
+  landingPath: string;
+  claimedAt?: string;
 };
 
 const DB_NAME = "open-abundance-offline";
@@ -91,6 +99,46 @@ export async function markLocalGuestClaimed(userId: string): Promise<LocalGuestI
   };
   await writeLocalGuest(nextGuest);
   return nextGuest;
+}
+
+export async function capturePendingReferral(referralCode: string, landingPath: string): Promise<LocalGuestIdentity> {
+  const normalizedCode = referralCode.trim();
+  if (!isValidReferralCode(normalizedCode)) {
+    return getOrCreateLocalGuest();
+  }
+
+  const guest = await getOrCreateLocalGuest();
+  const nextGuest = {
+    ...guest,
+    pendingReferral: {
+      referralCode: normalizedCode,
+      capturedAt: new Date().toISOString(),
+      landingPath
+    },
+    lastSeenAt: new Date().toISOString()
+  };
+  await writeLocalGuest(nextGuest);
+  return nextGuest;
+}
+
+export async function markPendingReferralClaimed(): Promise<LocalGuestIdentity> {
+  const guest = await getOrCreateLocalGuest();
+  if (!guest.pendingReferral) return guest;
+
+  const nextGuest = {
+    ...guest,
+    pendingReferral: {
+      ...guest.pendingReferral,
+      claimedAt: new Date().toISOString()
+    },
+    lastSeenAt: new Date().toISOString()
+  };
+  await writeLocalGuest(nextGuest);
+  return nextGuest;
+}
+
+export function isValidReferralCode(value: string): boolean {
+  return /^[A-Za-z0-9_-]{4,32}$/.test(value);
 }
 
 async function writeLocalGuest(value: LocalGuestIdentity): Promise<void> {

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { claimRegistrationAfterAuth, getBrowserSupabaseClient } from "@/lib/supabaseClient";
-import { getOrCreateLocalGuest, markLocalGuestClaimed } from "@/lib/guestIdentity";
+import { claimReferralAfterAuth, claimRegistrationAfterAuth, getBrowserSupabaseClient } from "@/lib/supabaseClient";
+import { getOrCreateLocalGuest, markLocalGuestClaimed, markPendingReferralClaimed } from "@/lib/guestIdentity";
 import { detectBrowserLocale, translate } from "@/lib/i18n";
 
 export default function AuthCallbackPage() {
@@ -20,9 +20,11 @@ export default function AuthCallbackPage() {
         if (error) throw error;
       }
 
-      await getOrCreateLocalGuest();
+      const guest = await getOrCreateLocalGuest();
       const userId = await claimRegistrationAfterAuth(locale);
       await markLocalGuestClaimed(userId);
+      await claimReferralAfterAuth(guest.pendingReferral, guest.guestId);
+      await markPendingReferralClaimed();
       setStatus(translate(locale, "app.common.ready"));
       window.location.replace("/?auth=complete");
     }

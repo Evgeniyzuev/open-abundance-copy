@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import type { PendingReferral } from "@/lib/guestIdentity";
 import { detectBrowserLocale, normalizeLocale, type AppLocale } from "@/lib/i18n";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://bsikxrsguwketlloflgi.supabase.co";
@@ -59,4 +60,36 @@ export async function claimRegistrationAfterAuth(locale: AppLocale = detectBrows
   }
 
   return payload.userId;
+}
+
+export async function claimReferralAfterAuth(
+  pendingReferral: PendingReferral | undefined,
+  guestId: string
+): Promise<void> {
+  const supabase = getBrowserSupabaseClient();
+  const {
+    data: { session },
+    error: sessionError
+  } = await supabase.auth.getSession();
+
+  if (sessionError) throw sessionError;
+  if (!session?.access_token) throw new Error("Supabase session is missing.");
+
+  const response = await fetch("/api/referrals/claim", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`
+    },
+    body: JSON.stringify({
+      referralCode: pendingReferral?.referralCode,
+      guestId,
+      capturedAt: pendingReferral?.capturedAt
+    })
+  });
+
+  const payload = (await response.json()) as { error?: string };
+  if (!response.ok || payload.error) {
+    throw new Error(payload.error ?? "Failed to claim referral.");
+  }
 }

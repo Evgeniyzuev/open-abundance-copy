@@ -130,6 +130,11 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .profile-panel strong { font-size: 24px; line-height: 1.15; }
 .profile-facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 4px; }
 .profile-facts span { min-height: 28px; display: inline-flex; align-items: center; border-radius: 999px; padding: 0 10px; background: #eef6ff; color: var(--blue); font-size: 12px; font-weight: 850; }
+.referral-box, .team-summary { width: 100%; display: grid; gap: 8px; justify-items: center; margin-top: 8px; border-radius: 12px; padding: 12px; background: #f7f8fb; }
+.referral-box > span, .team-summary > span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 850; text-transform: uppercase; }
+.referral-box p, .team-summary p { max-width: 100%; overflow-wrap: anywhere; }
+.referral-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.team-summary strong { font-size: 20px; }
 .level-up-modal { justify-items: center; text-align: center; }
 .level-up-modal h2 { margin: 0; font-size: 22px; }
 .level-up-modal p { margin: 0; color: var(--muted); font-size: 16px; line-height: 1.35; }

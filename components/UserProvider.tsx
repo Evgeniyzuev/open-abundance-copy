@@ -2,9 +2,9 @@
 
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { claimRegistrationAfterAuth, getBrowserSupabaseClient } from "@/lib/supabaseClient";
+import { claimReferralAfterAuth, claimRegistrationAfterAuth, getBrowserSupabaseClient } from "@/lib/supabaseClient";
 import type { Tables } from "@/lib/database.types";
-import { getOrCreateLocalGuest, markLocalGuestClaimed } from "@/lib/guestIdentity";
+import { capturePendingReferral, getOrCreateLocalGuest, markLocalGuestClaimed, markPendingReferralClaimed } from "@/lib/guestIdentity";
 import { detectBrowserLocale, normalizeLocale, translate, type AppLocale, type MessageKey } from "@/lib/i18n";
 
 export type UserProfile = Tables<"user_profiles">;
@@ -48,6 +48,23 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setGuestLocale(detectBrowserLocale());
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const referralCode = params.get("ref");
+    if (!referralCode) return;
+
+    capturePendingReferral(referralCode, `${window.location.pathname}${window.location.search}`)
+      .then(() => {
+        params.delete("ref");
+        const nextQuery = params.toString();
+        const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`;
+        window.history.replaceState({}, "", nextUrl);
+      })
+      .catch((referralError) => {
+        console.warn("Failed to capture referral code.", referralError);
+      });
   }, []);
 
   const locale = normalizeLocale(profile?.default_locale ?? guestLocale);
@@ -114,6 +131,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (session && !guest.claimedUserId) {
         const userId = await claimRegistrationAfterAuth();
         await markLocalGuestClaimed(userId);
+        await claimReferralAfterAuth(guest.pendingReferral, guest.guestId);
+        await markPendingReferralClaimed();
       }
 
       if (mounted) await refreshUserData();
@@ -132,8 +151,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN") {
         getOrCreateLocalGuest()
-          .then(() => claimRegistrationAfterAuth())
-          .then((userId) => markLocalGuestClaimed(userId))
+          .then(async (guest) => {
+            const userId = await claimRegistrationAfterAuth();
+            await markLocalGuestClaimed(userId);
+            await claimReferralAfterAuth(guest.pendingReferral, guest.guestId);
+            await markPendingReferralClaimed();
+          })
           .then(() => refreshUserData())
           .catch((claimError) => {
             console.warn("Registration claim failed", claimError);
