@@ -19,12 +19,12 @@ export async function POST(request: NextRequest) {
   }
 
   if (!accessToken) {
-    return NextResponse.json({ error: "Нужно войти в аккаунт, чтобы проверить челлендж." }, { status: 401 });
+    return NextResponse.json({ error: "Sign in to check the challenge." }, { status: 401 });
   }
 
   const body = (await request.json().catch(() => ({}))) as CheckRequest;
   if (!body.challengeId || !isUuid(body.challengeId)) {
-    return NextResponse.json({ error: "Некорректный челлендж." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid challenge." }, { status: 400 });
   }
 
   const supabase = createClient<Database>(supabaseUrl, serviceRoleKey, {
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser(accessToken);
 
   if (userError || !user) {
-    return NextResponse.json({ error: "Сессия устарела. Войдите снова." }, { status: 401 });
+    return NextResponse.json({ error: "Session expired. Sign in again." }, { status: 401 });
   }
 
   const { data: challenge, error: challengeError } = await supabase
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!challenge) {
-    return NextResponse.json({ error: "Челлендж не найден." }, { status: 404 });
+    return NextResponse.json({ error: "Challenge not found." }, { status: 404 });
   }
 
   const verification = await verifyChallenge(supabase, user.id, challenge);
@@ -112,17 +112,17 @@ async function verifyChallenge(
     ]);
 
     if (profile.error || core.error || wallet.error) {
-      return { ok: false, reason: "Не удалось проверить аккаунт. Попробуйте еще раз." };
+      return { ok: false, reason: "Could not check the account. Try again." };
     }
 
-    if (!profile.data) return { ok: false, reason: "Профиль еще не создан. Обновите страницу или войдите снова." };
-    if (!core.data) return { ok: false, reason: "Core еще не создан. Обновите страницу или войдите снова." };
-    if (!wallet.data) return { ok: false, reason: "Wallet еще не создан. Обновите страницу или войдите снова." };
+    if (!profile.data) return { ok: false, reason: "Profile is not created yet. Refresh the page or sign in again." };
+    if (!core.data) return { ok: false, reason: "Core is not created yet. Refresh the page or sign in again." };
+    if (!wallet.data) return { ok: false, reason: "Wallet is not created yet. Refresh the page or sign in again." };
 
     return { ok: true };
   }
 
-  return { ok: false, reason: "Для этого челленджа проверка еще не подключена." };
+  return { ok: false, reason: "Verification is not connected for this challenge yet." };
 }
 
 function getRewardAmount(value: Json): number {
@@ -136,10 +136,10 @@ function rewardLabelText(value: Json): string {
   if (typeof value === "number") return String(value);
   if (value && typeof value === "object" && !Array.isArray(value)) {
     const record = value as Record<string, Json | undefined>;
-    const ru = record.ru;
     const en = record.en;
-    if (typeof ru === "string") return ru;
+    const ru = record.ru;
     if (typeof en === "string") return en;
+    if (typeof ru === "string") return ru;
   }
 
   return "1$";

@@ -7,28 +7,31 @@ import ChallengesApp from "@/components/ChallengesApp";
 import RecommendedWishes from "@/components/RecommendedWishes";
 import SocialApp from "@/components/SocialApp";
 import TasksApp from "@/components/TasksApp";
+import { useUserContext } from "@/components/UserProvider";
 import WalletApp from "@/components/WalletApp";
+import type { MessageKey } from "@/lib/i18n";
 
 type MainTabId = "goals" | "challenges" | "spark" | "wallet" | "people";
 type GoalTabId = "desires" | "notes" | "checks" | "map" | "growth";
 type WalletTabId = "wallet" | "core";
 type SocialTabId = "profile" | "teams";
+type TFunction = (key: MessageKey, values?: Record<string, string | number>) => string;
 
 type MainTab = {
   id: MainTabId;
-  title: string;
+  titleKey: MessageKey;
   icon: LucideIcon;
 };
 
 type GoalTab = {
   id: GoalTabId;
-  title: string;
+  titleKey: MessageKey;
   icon: LucideIcon;
 };
 
 type TopTab = {
   id: string;
-  title: string;
+  titleKey: MessageKey;
   icon: LucideIcon;
 };
 
@@ -37,29 +40,29 @@ type AppNavigationProps = {
 };
 
 const mainTabs: MainTab[] = [
-  { id: "goals", title: "Цели", icon: Target },
-  { id: "challenges", title: "Challenges", icon: Trophy },
-  { id: "spark", title: "Идеи", icon: Sparkles },
-  { id: "wallet", title: "Кошелек", icon: Wallet },
-  { id: "people", title: "Social", icon: Users }
+  { id: "goals", titleKey: "app.nav.goals", icon: Target },
+  { id: "challenges", titleKey: "app.nav.challenges", icon: Trophy },
+  { id: "spark", titleKey: "app.nav.spark", icon: Sparkles },
+  { id: "wallet", titleKey: "app.nav.wallet", icon: Wallet },
+  { id: "people", titleKey: "app.nav.people", icon: Users }
 ];
 
 const goalTabs: GoalTab[] = [
-  { id: "desires", title: "Желания", icon: Heart },
-  { id: "notes", title: "Заметки", icon: FileText },
-  { id: "checks", title: "Проверки", icon: CheckSquare },
-  { id: "map", title: "Карта", icon: Map },
-  { id: "growth", title: "Рост", icon: TrendingUp }
+  { id: "desires", titleKey: "app.nav.desires", icon: Heart },
+  { id: "notes", titleKey: "app.nav.notes", icon: FileText },
+  { id: "checks", titleKey: "app.nav.checks", icon: CheckSquare },
+  { id: "map", titleKey: "app.nav.map", icon: Map },
+  { id: "growth", titleKey: "app.nav.growth", icon: TrendingUp }
 ];
 
 const walletTabs: TopTab[] = [
-  { id: "wallet", title: "Wallet", icon: Wallet },
-  { id: "core", title: "Core", icon: Landmark }
+  { id: "wallet", titleKey: "app.nav.wallet", icon: Wallet },
+  { id: "core", titleKey: "wallet.core", icon: Landmark }
 ];
 
 const socialTabs: TopTab[] = [
-  { id: "profile", title: "Profile", icon: UserRound },
-  { id: "teams", title: "Teams", icon: Users }
+  { id: "profile", titleKey: "profile.title", icon: UserRound },
+  { id: "teams", titleKey: "app.nav.people", icon: Users }
 ];
 
 const REFRESH_COOLDOWN_MS = 5_000;
@@ -67,6 +70,7 @@ const PULL_THRESHOLD_PX = 72;
 const NAV_HIDE_DELTA_PX = 8;
 
 export default function AppNavigation({ notesSlot }: AppNavigationProps) {
+  const { t } = useUserContext();
   const [activeMainTab, setActiveMainTab] = useState<MainTabId>("goals");
   const [activeGoalTab, setActiveGoalTab] = useState<GoalTabId>("notes");
   const [activeWalletTab, setActiveWalletTab] = useState<WalletTabId>("wallet");
@@ -175,7 +179,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
     };
   }, [updateNavFromScrollIntent]);
 
-  const currentTitle = getCurrentTitle(activeMainTab, activeGoalTab);
+  const currentTitle = getCurrentTitle(activeMainTab, activeGoalTab, t);
   const showNotes = activeMainTab === "goals" && activeGoalTab === "notes";
   const showWishes = activeMainTab === "goals" && activeGoalTab === "desires";
   const showChecks = activeMainTab === "goals" && activeGoalTab === "checks";
@@ -194,9 +198,9 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   return (
     <>
       <div className={`pull-refresh-indicator ${isPulling ? "visible" : ""}`} style={{ transform: `translate(-50%, ${pullDistance}px)` }}>
-        {pullDistance >= PULL_THRESHOLD_PX ? "Отпустите" : "Потяните"}
+        {pullDistance >= PULL_THRESHOLD_PX ? t("app.pull.release") : t("app.pull.drag")}
       </div>
-      <TopTabBar activeMainTab={activeMainTab} activeTab={activeTopTab} hidden={navHidden} tabs={topTabs} onTabChange={handleTopTabChange} />
+      <TopTabBar activeMainTab={activeMainTab} activeTab={activeTopTab} hidden={navHidden} tabs={topTabs} t={t} onTabChange={handleTopTabChange} />
       <section className="app-content">
         {showNotes ? notesSlot : null}
         {showWishes ? <RecommendedWishes refreshNonce={refreshNonce} /> : null}
@@ -206,7 +210,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
         {showPeople ? <SocialApp activeTab={activeSocialTab} refreshNonce={refreshNonce} /> : null}
         {!showNotes && !showWishes && !showChecks && !showChallenges && !showWallet && !showPeople ? <PlaceholderScreen title={currentTitle} /> : null}
       </section>
-      <BottomTabBar activeTab={activeMainTab} hidden={navHidden} onTabChange={setActiveMainTab} />
+      <BottomTabBar activeTab={activeMainTab} hidden={navHidden} t={t} onTabChange={setActiveMainTab} />
     </>
   );
 }
@@ -216,24 +220,25 @@ type TopTabBarProps = {
   activeTab?: string;
   hidden: boolean;
   tabs: TopTab[];
+  t: TFunction;
   onTabChange: (tab: string) => void;
 };
 
-function TopTabBar({ activeMainTab, activeTab, hidden, tabs, onTabChange }: TopTabBarProps) {
+function TopTabBar({ activeMainTab, activeTab, hidden, tabs, t, onTabChange }: TopTabBarProps) {
   return (
-    <nav className={`glass-tabbar top-tabbar ${hidden ? "nav-hidden" : ""}`} aria-label="Вложенная навигация">
+    <nav className={`glass-tabbar top-tabbar ${hidden ? "nav-hidden" : ""}`} aria-label={t("app.nav.top")}>
       {tabs.length > 0 ? (
         tabs.map((tab) => (
           <TabButton
             active={tab.id === activeTab}
             icon={tab.icon}
             key={tab.id}
-            title={tab.title}
+            title={t(tab.titleKey)}
             onClick={() => onTabChange(tab.id)}
           />
         ))
       ) : (
-        <span className="tabbar-title">{getMainTabTitle(activeMainTab)}</span>
+        <span className="tabbar-title">{getMainTabTitle(activeMainTab, t)}</span>
       )}
     </nav>
   );
@@ -263,18 +268,19 @@ function TabButton({ active, icon: Icon, title, onClick }: TabButtonProps) {
 type BottomTabBarProps = {
   activeTab: MainTabId;
   hidden: boolean;
+  t: TFunction;
   onTabChange: (tab: MainTabId) => void;
 };
 
-function BottomTabBar({ activeTab, hidden, onTabChange }: BottomTabBarProps) {
+function BottomTabBar({ activeTab, hidden, t, onTabChange }: BottomTabBarProps) {
   return (
-    <nav className={`glass-tabbar bottom-tabbar ${hidden ? "nav-hidden" : ""}`} aria-label="Основная навигация">
+    <nav className={`glass-tabbar bottom-tabbar ${hidden ? "nav-hidden" : ""}`} aria-label={t("app.nav.bottom")}>
       {mainTabs.map((tab) => (
         <TabButton
           active={tab.id === activeTab}
           icon={tab.icon}
           key={tab.id}
-          title={tab.title}
+          title={t(tab.titleKey)}
           onClick={() => onTabChange(tab.id)}
         />
       ))}
@@ -290,8 +296,9 @@ function PlaceholderScreen({ title }: { title: string }) {
   );
 }
 
-function getMainTabTitle(tab: MainTabId): string {
-  return mainTabs.find((item) => item.id === tab)?.title ?? "Раздел";
+function getMainTabTitle(tab: MainTabId, t: TFunction): string {
+  const titleKey = mainTabs.find((item) => item.id === tab)?.titleKey;
+  return titleKey ? t(titleKey) : t("app.nav.section");
 }
 
 function getTopTabs(tab: MainTabId): TopTab[] {
@@ -313,8 +320,8 @@ function getActiveTopTab(
   return undefined;
 }
 
-function getCurrentTitle(mainTab: MainTabId, goalTab: GoalTabId): string {
-  if (mainTab !== "goals") return getMainTabTitle(mainTab);
-  return goalTabs.find((item) => item.id === goalTab)?.title ?? "Цели";
+function getCurrentTitle(mainTab: MainTabId, goalTab: GoalTabId, t: TFunction): string {
+  if (mainTab !== "goals") return getMainTabTitle(mainTab, t);
+  const titleKey = goalTabs.find((item) => item.id === goalTab)?.titleKey;
+  return titleKey ? t(titleKey) : t("app.nav.goals");
 }
-

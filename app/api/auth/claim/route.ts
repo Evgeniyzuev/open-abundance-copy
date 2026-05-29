@@ -1,12 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import type { Database } from "@/lib/database.types";
+import { normalizeLocale } from "@/lib/i18n";
 
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const authHeader = request.headers.get("authorization");
   const accessToken = authHeader?.replace(/^Bearer\s+/i, "");
+  const body = await readJsonBody(request);
+  const defaultLocale = normalizeLocale(body.defaultLocale);
 
   if (!supabaseUrl || !serviceRoleKey) {
     return NextResponse.json({ error: "Supabase server environment variables are missing." }, { status: 500 });
@@ -39,6 +42,15 @@ export async function POST(request: NextRequest) {
   const displayName = fullName ?? (googleName || user.email || null);
   const avatarUrl = textMetadata(user.user_metadata.avatar_url) ?? textMetadata(user.user_metadata.picture);
   const now = new Date().toISOString();
+  const { data: existingProfile, error: existingProfileError } = await supabase
+    .from("user_profiles")
+    .select("default_locale")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (existingProfileError) {
+    return NextResponse.json({ error: existingProfileError.message }, { status: 500 });
+  }
 
   const { error: profileError } = await supabase.from("user_profiles").upsert(
     {
@@ -48,7 +60,7 @@ export async function POST(request: NextRequest) {
       last_name: familyName ?? null,
       display_name: displayName,
       avatar_url: avatarUrl ?? null,
-      default_locale: "ru",
+      default_locale: normalizeLocale(existingProfile?.default_locale ?? defaultLocale),
       onboarding_state: { registrationChallenge: "completed" },
       updated_at: now
     },
@@ -88,4 +100,13 @@ export async function POST(request: NextRequest) {
 
 function textMetadata(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+async function readJsonBody(request: NextRequest): Promise<{ defaultLocale?: unknown }> {
+  try {
+    const body = await request.json();
+    return body && typeof body === "object" ? body : {};
+  } catch {
+    return {};
+  }
 }

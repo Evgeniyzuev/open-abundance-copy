@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser(accessToken);
 
   if (userError || !user) {
-    return NextResponse.json({ error: "Сессия устарела. Войдите снова." }, { status: 401 });
+    return NextResponse.json({ error: "Session expired. Sign in again." }, { status: 401 });
   }
 
   const [profileResult, coreResult, walletResult] = await Promise.all([

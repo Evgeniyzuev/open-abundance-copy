@@ -1,13 +1,14 @@
 "use client";
 
-import { RefreshCw, UserRound, Users } from "lucide-react";
+import { Languages, RefreshCw, UserRound, Users } from "lucide-react";
 import { useEffect } from "react";
 import { useUserContext } from "@/components/UserProvider";
+import type { AppLocale } from "@/lib/i18n";
 
 type SocialTab = "profile" | "teams";
 
 export default function SocialApp({ activeTab, refreshNonce }: { activeTab: SocialTab; refreshNonce: number }) {
-  const { user, profile, loading, refreshing, error, refreshUserData } = useUserContext();
+  const { user, profile, loading, refreshing, error, locale, refreshUserData, setLocale, t } = useUserContext();
 
   useEffect(() => {
     refreshUserData().catch((refreshError) => {
@@ -15,17 +16,18 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
     });
   }, [activeTab, refreshNonce, refreshUserData]);
 
-  const displayName = profile?.display_name ?? user?.email ?? "Гость";
-  const handle = profile?.username ? `@${profile.username}` : user?.email ?? "Локальный режим";
+  const displayName = profile?.display_name ?? user?.email ?? t("profile.guest");
+  const handle = profile?.username ? `@${profile.username}` : user?.email ?? t("profile.localMode");
+  const nextLocale: AppLocale = locale === "ru" ? "en" : "ru";
 
   return (
     <section className="social-screen">
       <header className="social-header">
         <div>
           <span>Social</span>
-          <h1>Профиль</h1>
+          <h1>{t("profile.title")}</h1>
         </div>
-        <button className="finance-icon-button" type="button" aria-label="Обновить" disabled={refreshing} onClick={() => refreshUserData()}>
+        <button className="finance-icon-button" type="button" aria-label={t("app.common.refresh")} disabled={refreshing} onClick={() => refreshUserData()}>
           <RefreshCw size={19} className={refreshing ? "spin" : ""} />
         </button>
       </header>
@@ -36,7 +38,7 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
             <Users size={34} />
           </div>
           <strong>Teams</strong>
-          <p>Команды появятся здесь позже.</p>
+          <p>{t("profile.teams.empty")}</p>
         </section>
       ) : null}
 
@@ -45,8 +47,8 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
           <div className="profile-avatar placeholder">
             <UserRound size={34} />
           </div>
-          <strong>Гость</strong>
-          <p>Пройдите челлендж регистрации, чтобы создать профиль.</p>
+          <strong>{t("profile.guest")}</strong>
+          <p>{t("profile.registrationRequired")}</p>
         </section>
       ) : null}
 
@@ -59,9 +61,13 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
           <p>{handle}</p>
           <div className="profile-facts">
             <span>Lvl {profile?.level ?? 0}</span>
-            <span>Профиль создан {profile ? formatDate(profile.created_at) : "..."}</span>
-            <span>{profile?.default_locale ?? "ru"}</span>
+            <span>{t("profile.created", { date: profile ? formatDate(profile.created_at, locale) : "..." })}</span>
+            <span>{locale.toUpperCase()}</span>
           </div>
+          <button className="secondary-button" type="button" aria-label={t("profile.language.toggle")} onClick={() => setLocale(nextLocale)}>
+            <Languages size={16} />
+            {t(nextLocale === "ru" ? "profile.language.ru" : "profile.language.en")}
+          </button>
         </section>
       ) : null}
 
@@ -70,6 +76,6 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
   );
 }
 
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
+function formatDate(value: string, locale: AppLocale): string {
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
 }

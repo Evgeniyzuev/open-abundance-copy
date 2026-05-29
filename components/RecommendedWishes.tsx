@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Tables } from "@/lib/database.types";
+import { useUserContext } from "@/components/UserProvider";
 
 type RecommendedWish = Pick<
   Tables<"recommended_wishes">,
@@ -20,6 +21,7 @@ type RecommendedWishesProps = {
 };
 
 export default function RecommendedWishes({ refreshNonce }: RecommendedWishesProps) {
+  const { t } = useUserContext();
   const [wishes, setWishes] = useState<RecommendedWish[]>([]);
   const [selectedWish, setSelectedWish] = useState<RecommendedWish | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
@@ -72,12 +74,12 @@ export default function RecommendedWishes({ refreshNonce }: RecommendedWishesPro
 
   return (
     <section className="wishes-screen">
-      {status === "loading" ? <WishOfflineState title="Загрузка..." description="Подготавливаем рекомендации." /> : null}
-      {status === "offline" ? <WishOfflineState title="Нет подключения" description="Когда интернет появится, рекомендации загрузятся автоматически. Картинки останутся внешними и не сохраняются локально." /> : null}
+      {status === "loading" ? <WishOfflineState title={t("app.common.loading")} description={t("wishes.loading.description")} /> : null}
+      {status === "offline" ? <WishOfflineState title={t("app.common.offline")} description={t("wishes.offline.description")} /> : null}
       {wishes.length > 0 ? (
         <>
-        {isRefreshing ? <div className="wishes-refreshing">Обновляем...</div> : null}
-        <div className="wish-grid" aria-label="Рекомендованные желания">
+        {isRefreshing ? <div className="wishes-refreshing">{t("wishes.refreshing")}</div> : null}
+        <div className="wish-grid" aria-label={t("wishes.gridLabel")}>
           {wishes.map((wish) => (
             <button className="wish-tile" key={wish.id} type="button" onClick={() => setSelectedWish(wish)}>
               <img alt="" src={wish.image_url} loading="lazy" />
@@ -96,7 +98,7 @@ export default function RecommendedWishes({ refreshNonce }: RecommendedWishesPro
 function WishOfflineState({ title, description }: { title: string; description: string }) {
   return (
     <div className="wish-offline-state">
-      <div className="wish-offline-icon">♡</div>
+      <div className="wish-offline-icon">OA</div>
       <strong>{title}</strong>
       <p>{description}</p>
     </div>
@@ -109,11 +111,13 @@ type WishDetailModalProps = {
 };
 
 function WishDetailModal({ wish, onClose }: WishDetailModalProps) {
+  const { t } = useUserContext();
+
   return (
     <div className="modal-backdrop" role="presentation">
       <div className="modal-sheet wish-modal">
         <div className="modal-header">
-          <button className="text-button" type="button" onClick={onClose}>Закрыть</button>
+          <button className="text-button" type="button" onClick={onClose}>{t("app.common.close")}</button>
           <h2>{wish.title}</h2>
           <span />
         </div>
@@ -123,7 +127,7 @@ function WishDetailModal({ wish, onClose }: WishDetailModalProps) {
           <p>{wish.description}</p>
           <div className="wish-meta">
             {wish.estimated_cost ? <span>{wish.estimated_cost}</span> : null}
-            <span>Уровень {wish.difficulty_level}</span>
+            <span>{t("wishes.level", { level: wish.difficulty_level })}</span>
           </div>
         </div>
       </div>

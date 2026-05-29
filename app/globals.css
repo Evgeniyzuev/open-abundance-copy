@@ -198,6 +198,7 @@ h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.05; letter-spacing: 0; }
 .modal-sheet textarea { min-height: 120px; resize: vertical; }
 .date-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .secondary-button, .danger-button { min-height: 42px; border-radius: 12px; padding: 0 14px; font-weight: 800; }
+.secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
 .secondary-button { background: #eef6ff; color: var(--blue); }
 .danger-button { background: #fff0f0; color: var(--danger); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }

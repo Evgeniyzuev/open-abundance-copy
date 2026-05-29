@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { claimRegistrationAfterAuth, getBrowserSupabaseClient } from "@/lib/supabaseClient";
 import type { Tables } from "@/lib/database.types";
 import { getOrCreateLocalGuest, markLocalGuestClaimed } from "@/lib/guestIdentity";
+import { detectBrowserLocale, normalizeLocale, translate, type AppLocale, type MessageKey } from "@/lib/i18n";
 
 export type UserProfile = Tables<"user_profiles">;
 export type CoreAccount = Tables<"core_accounts">;
@@ -18,7 +19,10 @@ type UserContextValue = {
   loading: boolean;
   refreshing: boolean;
   error: string | null;
+  locale: AppLocale;
   refreshUserData: () => Promise<void>;
+  setLocale: (nextLocale: AppLocale) => Promise<void>;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
 };
 
 type UserContextResponse = {
@@ -40,6 +44,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingLevelUps, setPendingLevelUps] = useState<number[]>([]);
+  const [guestLocale, setGuestLocale] = useState<AppLocale>("en");
+
+  useEffect(() => {
+    setGuestLocale(detectBrowserLocale());
+  }, []);
+
+  const locale = normalizeLocale(profile?.default_locale ?? guestLocale);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const refreshUserData = useCallback(async () => {
     const supabase = getBrowserSupabaseClient();
@@ -186,6 +201,36 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const setLocale = useCallback(async (nextLocale: AppLocale) => {
+    const normalizedLocale = normalizeLocale(nextLocale);
+    const previousProfile = profile;
+
+    setGuestLocale(normalizedLocale);
+    setProfile((current) => current ? { ...current, default_locale: normalizedLocale } : current);
+
+    if (!user) return;
+
+    try {
+      const supabase = getBrowserSupabaseClient();
+      const { error: updateError } = await supabase
+        .from("user_profiles")
+        .update({ default_locale: normalizedLocale, updated_at: new Date().toISOString() })
+        .eq("user_id", user.id);
+
+      if (updateError) throw updateError;
+      await refreshUserData();
+    } catch (localeError) {
+      setProfile(previousProfile);
+      setError(localeError instanceof Error ? localeError.message : "Failed to update language.");
+      throw localeError;
+    }
+  }, [profile, refreshUserData, user]);
+
+  const t = useCallback(
+    (key: MessageKey, values?: Record<string, string | number>) => translate(locale, key, values),
+    [locale]
+  );
+
   const value = useMemo(
     () => ({
       user,
@@ -195,9 +240,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
       loading,
       refreshing,
       error,
-      refreshUserData
+      locale,
+      refreshUserData,
+      setLocale,
+      t
     }),
-    [core, error, loading, profile, refreshUserData, refreshing, user, wallet]
+    [core, error, loading, locale, profile, refreshUserData, refreshing, setLocale, t, user, wallet]
   );
 
   return (
@@ -207,6 +255,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         <LevelUpModal
           level={pendingLevelUps[0]}
           onClose={() => acknowledgeLevelUp(pendingLevelUps[0])}
+          t={t}
         />
       ) : null}
     </UserContext.Provider>
@@ -219,15 +268,23 @@ export function useUserContext(): UserContextValue {
   return value;
 }
 
-function LevelUpModal({ level, onClose }: { level: number; onClose: () => void }) {
+function LevelUpModal({
+  level,
+  onClose,
+  t
+}: {
+  level: number;
+  onClose: () => void;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
+}) {
   return (
     <div className="modal-backdrop" role="presentation">
       <div className="modal-sheet small level-up-modal">
         <span className="level-up-badge">Lvl {level}</span>
-        <h2>Новый уровень</h2>
-        <p>Ваш Core достиг порога уровня {level}. Открываются новые возможности и челленджи.</p>
+        <h2>{t("levelUp.title")}</h2>
+        <p>{t("levelUp.description", { level })}</p>
         <button className="challenge-primary-action" type="button" onClick={onClose}>
-          Отлично
+          {t("app.common.excellent")}
         </button>
       </div>
     </div>

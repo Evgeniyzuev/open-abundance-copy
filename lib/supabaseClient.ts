@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
+import { detectBrowserLocale, normalizeLocale, type AppLocale } from "@/lib/i18n";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://bsikxrsguwketlloflgi.supabase.co";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -33,7 +34,7 @@ export async function signInWithGoogle(): Promise<void> {
   if (error) throw error;
 }
 
-export async function claimRegistrationAfterAuth(): Promise<string> {
+export async function claimRegistrationAfterAuth(locale: AppLocale = detectBrowserLocale()): Promise<string> {
   const supabase = getBrowserSupabaseClient();
   const {
     data: { session },
@@ -48,7 +49,8 @@ export async function claimRegistrationAfterAuth(): Promise<string> {
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${session.access_token}`
-    }
+    },
+    body: JSON.stringify({ defaultLocale: normalizeLocale(locale) })
   });
 
   const payload = (await response.json()) as { userId?: string; error?: string };

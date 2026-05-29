@@ -17,13 +17,13 @@ export async function POST(request: NextRequest) {
   }
 
   if (!accessToken) {
-    return NextResponse.json({ error: "Нужно войти в аккаунт." }, { status: 401 });
+    return NextResponse.json({ error: "Sign in to continue." }, { status: 401 });
   }
 
   const body = (await request.json().catch(() => ({}))) as LevelSeenRequest;
   const requestedLevel = Number(body.level);
   if (!Number.isInteger(requestedLevel) || requestedLevel < 0) {
-    return NextResponse.json({ error: "Некорректный уровень." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid level." }, { status: 400 });
   }
 
   const supabase = createClient<Database>(supabaseUrl, serviceRoleKey, {
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser(accessToken);
 
   if (userError || !user) {
-    return NextResponse.json({ error: "Сессия устарела. Войдите снова." }, { status: 401 });
+    return NextResponse.json({ error: "Session expired. Sign in again." }, { status: 401 });
   }
 
   const { data: core, error: coreError } = await supabase
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!core) {
-    return NextResponse.json({ error: "Core еще не создан." }, { status: 404 });
+    return NextResponse.json({ error: "Core is not created yet." }, { status: 404 });
   }
 
   const nextSeenLevel = Math.max(core.last_seen_level, Math.min(requestedLevel, core.level));

@@ -5,10 +5,12 @@ import { CheckCircle2, Clock3, ShieldCheck, Trophy } from "lucide-react";
 import { getOrCreateLocalGuest } from "@/lib/guestIdentity";
 import { getBrowserSupabaseClient, signInWithGoogle } from "@/lib/supabaseClient";
 import { useUserContext } from "@/components/UserProvider";
+import type { AppLocale, MessageKey } from "@/lib/i18n";
 
 type LocaleText = Record<string, string> | null;
 type RewardLabel = LocaleText | string | number | null;
 type ChallengeStatus = "accepted" | "completed" | "declined" | "failed";
+type TFunction = (key: MessageKey, values?: Record<string, string | number>) => string;
 
 type Challenge = {
   id: string;
@@ -43,7 +45,6 @@ type CheckChallengeResponse = {
 };
 
 const ACCEPTED_CHALLENGES_CACHE_KEY = "open-abundance:accepted-challenges:v1";
-const LOCALE = "ru";
 const DEFAULT_USER_LEVEL = 1;
 
 type ChallengesAppProps = {
@@ -59,7 +60,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   const [completedOpen, setCompletedOpen] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const { user, profile, core, refreshUserData } = useUserContext();
+  const { user, profile, core, locale, refreshUserData, t } = useUserContext();
   const userLevel = core?.level ?? profile?.level ?? DEFAULT_USER_LEVEL;
 
   useEffect(() => {
@@ -171,7 +172,9 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       <>
         <ChallengeArchiveScreen
           challenges={completedChallenges}
+          locale={locale}
           userLevel={userLevel}
+          t={t}
           onBack={() => {
             setCompletedOpen(false);
             setSelectedChallenge(null);
@@ -183,7 +186,9 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
           <ChallengeDetailModal
             challenge={selectedChallenge}
             isRegistered={Boolean(user)}
+            locale={locale}
             userLevel={userLevel}
+            t={t}
             onAccept={() => acceptChallenge(selectedChallenge)}
             onClose={() => setSelectedChallenge(null)}
             onComplete={completeChallenge}
@@ -191,7 +196,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
           />
         ) : null}
 
-        {completionReward ? <ChallengeCompleteModal reward={completionReward} onClose={() => setCompletionReward(null)} /> : null}
+        {completionReward ? <ChallengeCompleteModal reward={completionReward} t={t} onClose={() => setCompletionReward(null)} /> : null}
       </>
     );
   }
@@ -201,26 +206,26 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       <header className="challenges-header">
         <div>
           <span>Challenges</span>
-          <h1>Челленджи</h1>
+          <h1>{t("challenges.title")}</h1>
         </div>
-        {isRefreshing ? <small>Обновляем...</small> : null}
+        {isRefreshing ? <small>{t("wishes.refreshing")}</small> : null}
       </header>
 
-      {status === "loading" ? <ChallengeState title="Загрузка..." description="Готовим челленджи." /> : null}
-      {status === "offline" ? <ChallengeState title="Нет подключения" description="Доступные челленджи видны только онлайн. Принятые появятся здесь после синхронизации." /> : null}
+      {status === "loading" ? <ChallengeState title={t("app.common.loading")} description={t("challenges.loading.description")} /> : null}
+      {status === "offline" ? <ChallengeState title={t("app.common.offline")} description={t("challenges.offline.description")} /> : null}
 
       {availableChallenges.length > 0 ? (
-        <ChallengeSection challenges={availableChallenges} title="Доступные" userLevel={userLevel} onOpen={(challenge) => setSelectedChallenge(challenge)} />
+        <ChallengeSection challenges={availableChallenges} locale={locale} title={t("challenges.available")} userLevel={userLevel} t={t} onOpen={(challenge) => setSelectedChallenge(challenge)} />
       ) : null}
 
       {acceptedChallenges.length > 0 ? (
-        <ChallengeSection challenges={acceptedChallenges} title="Принятые" userLevel={userLevel} onOpen={(challenge) => setSelectedChallenge(challenge)} />
+        <ChallengeSection challenges={acceptedChallenges} locale={locale} title={t("challenges.accepted")} userLevel={userLevel} t={t} onOpen={(challenge) => setSelectedChallenge(challenge)} />
       ) : null}
 
       {completedChallenges.length > 0 ? (
         <section className="challenge-section">
           <button className="challenge-archive-link" type="button" onClick={() => setCompletedOpen(true)}>
-            <span>{"\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u043d\u044b\u0435"}</span>
+            <span>{t("challenges.completedPlural")}</span>
             <strong>{completedChallenges.length}</strong>
           </button>
         </section>
@@ -230,7 +235,9 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
         <ChallengeDetailModal
           challenge={selectedChallenge}
           isRegistered={Boolean(user)}
+          locale={locale}
           userLevel={userLevel}
+          t={t}
           onAccept={() => acceptChallenge(selectedChallenge)}
           onClose={() => setSelectedChallenge(null)}
           onComplete={completeChallenge}
@@ -238,19 +245,23 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
         />
       ) : null}
 
-      {completionReward ? <ChallengeCompleteModal reward={completionReward} onClose={() => setCompletionReward(null)} /> : null}
+      {completionReward ? <ChallengeCompleteModal reward={completionReward} t={t} onClose={() => setCompletionReward(null)} /> : null}
     </section>
   );
 }
 
 function ChallengeArchiveScreen({
   challenges,
+  locale,
   userLevel,
+  t,
   onBack,
   onOpen
 }: {
   challenges: Challenge[];
+  locale: AppLocale;
   userLevel: number;
+  t: TFunction;
   onBack: () => void;
   onOpen: (challenge: Challenge) => void;
 }) {
@@ -258,15 +269,15 @@ function ChallengeArchiveScreen({
     <section className="challenges-screen challenge-archive-screen">
       <header className="task-archive-topbar">
         <button className="back-button" type="button" onClick={onBack}>{"\u2039"}</button>
-        <h1>{"\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u043d\u044b\u0435"}</h1>
+        <h1>{t("challenges.completedPlural")}</h1>
       </header>
 
       {challenges.length === 0 ? (
-        <div className="task-empty">{"\u0417\u0434\u0435\u0441\u044c \u043f\u043e\u043a\u0430 \u043d\u0438\u0447\u0435\u0433\u043e \u043d\u0435\u0442."}</div>
+        <div className="task-empty">{t("challenges.emptyArchive")}</div>
       ) : (
         <div className="challenge-list">
           {challenges.map((challenge) => (
-            <ChallengeRow challenge={challenge} key={challenge.id} userLevel={userLevel} onOpen={() => onOpen(challenge)} />
+            <ChallengeRow challenge={challenge} key={challenge.id} locale={locale} userLevel={userLevel} t={t} onOpen={() => onOpen(challenge)} />
           ))}
         </div>
       )}
@@ -276,13 +287,17 @@ function ChallengeArchiveScreen({
 
 function ChallengeSection({
   challenges,
+  locale,
   title,
   userLevel,
+  t,
   onOpen
 }: {
   challenges: Challenge[];
+  locale: AppLocale;
   title: string;
   userLevel: number;
+  t: TFunction;
   onOpen: (challenge: Challenge) => void;
 }) {
   return (
@@ -290,14 +305,14 @@ function ChallengeSection({
       <h2>{title}</h2>
       <div className="challenge-list">
         {challenges.map((challenge) => (
-          <ChallengeRow challenge={challenge} key={challenge.id} userLevel={userLevel} onOpen={() => onOpen(challenge)} />
+          <ChallengeRow challenge={challenge} key={challenge.id} locale={locale} userLevel={userLevel} t={t} onOpen={() => onOpen(challenge)} />
         ))}
       </div>
     </section>
   );
 }
 
-function ChallengeRow({ challenge, userLevel, onOpen }: { challenge: Challenge; userLevel: number; onOpen: () => void }) {
+function ChallengeRow({ challenge, locale, userLevel, t, onOpen }: { challenge: Challenge; locale: AppLocale; userLevel: number; t: TFunction; onOpen: () => void }) {
   const accepted = isActiveChallenge(challenge);
   const completed = challenge.user_challenge_status === "completed";
   const locked = !accepted && !completed && challenge.difficulty_level > userLevel;
@@ -308,13 +323,13 @@ function ChallengeRow({ challenge, userLevel, onOpen }: { challenge: Challenge; 
         {challenge.image_url ? <img alt="" src={challenge.image_url} loading="lazy" /> : <Trophy size={24} />}
       </span>
       <span className="challenge-row-body">
-        <span className="challenge-row-title">{text(challenge.title, "Челлендж")}</span>
-        <small>{completed ? "Завершено" : text(challenge.description, "")}</small>
+        <span className="challenge-row-title">{text(challenge.title, t("challenges.challenge"), locale)}</span>
+        <small>{completed ? t("challenges.completed") : text(challenge.description, "", locale)}</small>
         <span className="challenge-meta">
-          <span>{rewardText(challenge.reward_label)}</span>
+          <span>{rewardText(challenge.reward_label, locale)}</span>
           <span className={locked ? "challenge-level locked-level" : "challenge-level"}>Lvl {challenge.difficulty_level}</span>
-          {challenge.duration_days ? <span>{challenge.duration_days} дн.</span> : null}
-          {completed ? <span>Готово</span> : null}
+          {challenge.duration_days ? <span>{challenge.duration_days} {t("app.common.days.short")}</span> : null}
+          {completed ? <span>{t("challenges.done")}</span> : null}
         </span>
       </span>
     </button>
@@ -324,7 +339,9 @@ function ChallengeRow({ challenge, userLevel, onOpen }: { challenge: Challenge; 
 function ChallengeDetailModal({
   challenge,
   isRegistered,
+  locale,
   userLevel,
+  t,
   onAccept,
   onClose,
   onComplete,
@@ -332,7 +349,9 @@ function ChallengeDetailModal({
 }: {
   challenge: Challenge;
   isRegistered: boolean;
+  locale: AppLocale;
   userLevel: number;
+  t: TFunction;
   onAccept: () => void;
   onClose: () => void;
   onComplete: (challenge: Challenge, reward: { amount: number; account: string; claimed: boolean }) => void;
@@ -369,7 +388,7 @@ function ChallengeDetailModal({
 
       if (error) throw error;
       if (!session?.access_token) {
-        setCheckMessage("Сначала войдите в аккаунт.");
+        setCheckMessage(t("challenges.signInFirst"));
         setCheckStatus("idle");
         return;
       }
@@ -385,17 +404,17 @@ function ChallengeDetailModal({
       const payload = (await response.json()) as CheckChallengeResponse;
 
       if (!response.ok || payload.error) {
-        throw new Error(payload.error ?? "Не удалось проверить челлендж.");
+        throw new Error(payload.error ?? t("challenges.checkFailed"));
       }
 
       if (!payload.completed) {
-        setCheckMessage(payload.message ?? "Проверка пока не прошла.");
+        setCheckMessage(payload.message ?? t("challenges.checkPending"));
         setCheckStatus("idle");
         return;
       }
 
       const reward = {
-        amount: payload.rewardAmount ?? rewardAmount(challenge.reward_label),
+        amount: payload.rewardAmount ?? rewardAmount(challenge.reward_label, locale),
         account: payload.rewardAccount ?? "core",
         claimed: Boolean(payload.rewardClaimed)
       };
@@ -404,7 +423,7 @@ function ChallengeDetailModal({
       setCheckStatus("idle");
     } catch (error) {
       console.error(error);
-      setCheckMessage(error instanceof Error ? error.message : "Не удалось проверить челлендж.");
+      setCheckMessage(error instanceof Error ? error.message : t("challenges.checkFailed"));
       setCheckStatus("error");
     }
   }
@@ -413,8 +432,8 @@ function ChallengeDetailModal({
     <div className="modal-backdrop" role="presentation">
       <div className="modal-sheet challenge-modal">
         <div className="modal-header">
-          <button className="text-button" type="button" onClick={onClose}>Закрыть</button>
-          <h2>Челлендж</h2>
+          <button className="text-button" type="button" onClick={onClose}>{t("app.common.close")}</button>
+          <h2>{t("challenges.challenge")}</h2>
           <span />
         </div>
 
@@ -423,73 +442,73 @@ function ChallengeDetailModal({
         <div className="challenge-modal-body">
           <div>
             <strong>{challenge.category}</strong>
-            <h3>{text(challenge.title, "Челлендж")}</h3>
-            <p>{text(challenge.description, "")}</p>
+            <h3>{text(challenge.title, t("challenges.challenge"), locale)}</h3>
+            <p>{text(challenge.description, "", locale)}</p>
           </div>
 
           <div className="challenge-detail-grid">
             <span>
               <Trophy size={17} />
-              {rewardText(challenge.reward_label)}
+              {rewardText(challenge.reward_label, locale)}
             </span>
             <span>
               <ShieldCheck size={17} />
-              {getVerificationLabel(challenge.verification_type)}
+              {getVerificationLabel(challenge.verification_type, t)}
             </span>
             {challenge.duration_days ? (
               <span>
                 <Clock3 size={17} />
-                {challenge.duration_days} дн.
+                {challenge.duration_days} {t("app.common.days.short")}
               </span>
             ) : null}
           </div>
 
-          {text(challenge.requirements, "") ? (
+          {text(challenge.requirements, "", locale) ? (
             <section>
-              <h4>Требования</h4>
-              <p>{text(challenge.requirements, "")}</p>
+              <h4>{t("challenges.requirements")}</h4>
+              <p>{text(challenge.requirements, "", locale)}</p>
             </section>
           ) : null}
 
-          {text(challenge.instructions, "") ? (
+          {text(challenge.instructions, "", locale) ? (
             <section>
-              <h4>Инструкция</h4>
-              <p>{text(challenge.instructions, "")}</p>
+              <h4>{t("challenges.instructions")}</h4>
+              <p>{text(challenge.instructions, "", locale)}</p>
             </section>
           ) : null}
 
           {completed ? (
             <div className="challenge-access completed">
               <CheckCircle2 size={17} />
-              Завершено
+              {t("challenges.completed")}
             </div>
           ) : null}
 
           {!completed && locked ? (
             <div className="challenge-access locked">
-              Доступно с уровня {challenge.difficulty_level}
+              {t("challenges.availableFrom", { level: challenge.difficulty_level })}
             </div>
           ) : null}
 
           {!completed && !locked && !isRegistered && signupChallenge ? (
             <button className="challenge-primary-action" type="button" disabled={authStatus === "loading"} onClick={handleSignup}>
-              {authStatus === "loading" ? "Открываем Google..." : "Войти через Google"}
+              {authStatus === "loading" ? t("challenges.openingGoogle") : t("challenges.signInGoogle")}
             </button>
           ) : null}
 
           {!completed && !locked && accepted ? (
             <button className="challenge-primary-action" type="button" disabled={checkStatus === "loading"} onClick={handleCheck}>
-              {checkStatus === "loading" ? "Проверяем..." : "check✅"}
+              {checkStatus === "loading" ? t("challenges.checking") : t("challenges.check")}
             </button>
           ) : null}
 
           {!completed && !locked && !accepted && (!signupChallenge || isRegistered) ? (
             <button className="challenge-primary-action" type="button" onClick={onAccept}>
-              Принять челлендж
+              {t("challenges.accept")}
             </button>
           ) : null}
 
-          {authStatus === "error" ? <p className="challenge-error">Не удалось начать вход. Проверьте подключение и попробуйте еще раз.</p> : null}
+          {authStatus === "error" ? <p className="challenge-error">{t("challenges.authError")}</p> : null}
           {checkMessage ? <p className={checkStatus === "error" ? "challenge-error" : "challenge-note"}>{checkMessage}</p> : null}
         </div>
       </div>
@@ -497,14 +516,14 @@ function ChallengeDetailModal({
   );
 }
 
-function ChallengeCompleteModal({ reward, onClose }: { reward: { amount: number; account: string; claimed: boolean }; onClose: () => void }) {
+function ChallengeCompleteModal({ reward, t, onClose }: { reward: { amount: number; account: string; claimed: boolean }; t: TFunction; onClose: () => void }) {
   return (
     <div className="modal-backdrop" role="presentation">
       <div className="modal-sheet small challenge-complete-modal">
-        <span className="streak-complete-icon">✓</span>
-        <h2>Челлендж завершен</h2>
-        <p>{reward.claimed ? `Награда ${reward.amount}$ зачислена в ${reward.account === "core" ? "Core" : "Wallet"}.` : "Награда уже была получена ранее."}</p>
-        <button className="challenge-primary-action" type="button" onClick={onClose}>Отлично</button>
+        <span className="streak-complete-icon">OK</span>
+        <h2>{t("challenges.completeTitle")}</h2>
+        <p>{reward.claimed ? t("challenges.rewardClaimed", { amount: reward.amount, account: reward.account === "core" ? "Core" : "Wallet" }) : t("challenges.rewardAlreadyClaimed")}</p>
+        <button className="challenge-primary-action" type="button" onClick={onClose}>{t("app.common.excellent")}</button>
       </div>
     </div>
   );
@@ -520,25 +539,25 @@ function ChallengeState({ title, description }: { title: string; description: st
   );
 }
 
-function text(value: LocaleText, fallback: string): string {
-  return value?.[LOCALE] ?? value?.en ?? fallback;
+function text(value: LocaleText, fallback: string, locale: AppLocale): string {
+  return value?.[locale] ?? value?.en ?? fallback;
 }
 
-function rewardText(value: RewardLabel): string {
-  const amount = rewardAmount(value);
+function rewardText(value: RewardLabel, locale: AppLocale): string {
+  const amount = rewardAmount(value, locale);
   return amount ? `${amount}$` : "1$";
 }
 
-function rewardAmount(value: RewardLabel): number {
-  const raw = rewardLabelText(value).trim();
+function rewardAmount(value: RewardLabel, locale: AppLocale): number {
+  const raw = rewardLabelText(value, locale).trim();
   const amount = raw.match(/(\d+(?:[.,]\d+)?)\s*\$/)?.[1] ?? raw.match(/\+(\d+(?:[.,]\d+)?)/)?.[1] ?? raw.match(/(\d+(?:[.,]\d+)?)/)?.[1];
   return amount ? Number(amount.replace(",", ".")) : 1;
 }
 
-function getVerificationLabel(type: Challenge["verification_type"]): string {
-  if (type === "auto") return "Автопроверка";
-  if (type === "community") return "Проверка сообществом";
-  return "Ручная проверка";
+function getVerificationLabel(type: Challenge["verification_type"], t: TFunction): string {
+  if (type === "auto") return t("challenges.verification.auto");
+  if (type === "community") return t("challenges.verification.community");
+  return t("challenges.verification.manual");
 }
 
 function readCachedAcceptedChallenges(): Challenge[] {
@@ -585,8 +604,8 @@ function mergeChallengeLists(first: Challenge[], second: Challenge[]): Challenge
   return merged;
 }
 
-function rewardLabelText(value: RewardLabel): string {
+function rewardLabelText(value: RewardLabel, locale: AppLocale): string {
   if (typeof value === "string") return value;
   if (typeof value === "number") return String(value);
-  return text(value, "1$");
+  return text(value, "1$", locale);
 }

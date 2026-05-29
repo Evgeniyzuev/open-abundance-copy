@@ -56,3 +56,17 @@ f:\git\
   abundance-effect\          old app, reference only
   abundance-effect-pwa\      new app, main repo
 ```
+
+## UI Text And Translations
+
+Keep the interface quiet and purposeful. Do not add visible explanatory labels, helper text, or repeated captions unless they directly help the current user action.
+
+When adding or changing UI text:
+
+- reuse existing translated components, buttons, labels, and message keys where the meaning matches;
+- add new text through the shared language dictionary instead of hardcoding Russian or English in TSX;
+- avoid duplicating near-identical button text such as close, cancel, done, refresh, delete, and loading states;
+- prefer icon buttons with accessible labels for familiar actions when the screen already makes the action clear;
+- keep new message keys stable and ASCII-only.
+
+If a reusable translated element would become awkward or misleading, create a small shared variant instead of copy-pasting text across screens.
