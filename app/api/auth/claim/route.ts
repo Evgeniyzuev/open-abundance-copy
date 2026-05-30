@@ -95,11 +95,59 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: walletError.message }, { status: 500 });
   }
 
+  const { error: signupChallengeError } = await completeSignupChallenge(supabase, user.id);
+  if (signupChallengeError) {
+    return NextResponse.json({ error: signupChallengeError }, { status: 500 });
+  }
+
   return NextResponse.json({ userId: user.id });
+}
+
+async function completeSignupChallenge(supabase: ReturnType<typeof createClient<Database>>, userId: string): Promise<{ error?: string }> {
+  const { data: challenge, error: challengeError } = await supabase
+    .from("challenges")
+    .select("id,reward_label")
+    .eq("verification_logic", "signup")
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (challengeError) return { error: challengeError.message };
+  if (!challenge) return {};
+
+  const { error: completionError } = await supabase.rpc("complete_user_challenge", {
+    p_user_id: userId,
+    p_challenge_id: challenge.id,
+    p_reward_account: "core",
+    p_reward_amount: getRewardAmount(challenge.reward_label)
+  });
+
+  return completionError ? { error: completionError.message } : {};
 }
 
 function textMetadata(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function getRewardAmount(value: Database["public"]["Tables"]["challenges"]["Row"]["reward_label"]): number {
+  const raw = rewardLabelText(value);
+  const amount = raw.match(/(\d+(?:[.,]\d+)?)\s*\$/)?.[1] ?? raw.match(/\+(\d+(?:[.,]\d+)?)/)?.[1] ?? raw.match(/(\d+(?:[.,]\d+)?)/)?.[1];
+  return amount ? Number(amount.replace(",", ".")) : 1;
+}
+
+function rewardLabelText(value: Database["public"]["Tables"]["challenges"]["Row"]["reward_label"]): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    const en = record.en;
+    const ru = record.ru;
+    if (typeof en === "string") return en;
+    if (typeof ru === "string") return ru;
+  }
+
+  return "1$";
 }
 
 async function readJsonBody(request: NextRequest): Promise<{ defaultLocale?: unknown }> {

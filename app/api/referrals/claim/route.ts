@@ -33,8 +33,13 @@ export async function POST(request: NextRequest) {
       guestId,
       capturedAt
     });
+    const memberLevel = await getUserLevel(supabase, user.id);
 
-    const membership: TablesInsert<"team_memberships"> = referrerUserId && await canLead(supabase, referrerUserId, user.id)
+    if (memberLevel < 1) {
+      return NextResponse.json({ status: "pending_level_1", membership: null });
+    }
+
+    const membership: TablesInsert<"team_memberships"> = referrerUserId && await canLead(supabase, referrerUserId, user.id, memberLevel)
       ? {
           member_user_id: user.id,
           leader_user_id: referrerUserId
@@ -100,10 +105,9 @@ async function maybeCreateReferralEdge(
   return referralCodeRow.user_id;
 }
 
-async function canLead(supabase: SupabaseClient<Database>, leaderUserId: string, memberUserId: string): Promise<boolean> {
-  const [leaderProfileResult, memberProfileResult, directMembersResult] = await Promise.all([
+async function canLead(supabase: SupabaseClient<Database>, leaderUserId: string, memberUserId: string, memberLevel: number): Promise<boolean> {
+  const [leaderProfileResult, directMembersResult] = await Promise.all([
     supabase.from("user_profiles").select("level").eq("user_id", leaderUserId).maybeSingle(),
-    supabase.from("user_profiles").select("level").eq("user_id", memberUserId).maybeSingle(),
     supabase
       .from("team_memberships")
       .select("member_user_id", { count: "exact", head: true })
@@ -112,14 +116,23 @@ async function canLead(supabase: SupabaseClient<Database>, leaderUserId: string,
   ]);
 
   if (leaderProfileResult.error) throw leaderProfileResult.error;
-  if (memberProfileResult.error) throw memberProfileResult.error;
   if (directMembersResult.error) throw directMembersResult.error;
 
   const leaderLevel = leaderProfileResult.data?.level ?? 0;
-  const memberLevel = memberProfileResult.data?.level ?? 0;
   const usedCapacity = directMembersResult.count ?? 0;
 
-  return leaderLevel > memberLevel && usedCapacity < leaderLevel;
+  return memberUserId !== leaderUserId && memberLevel >= 1 && leaderLevel > memberLevel && usedCapacity < leaderLevel;
+}
+
+async function getUserLevel(supabase: SupabaseClient<Database>, userId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("level")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.level ?? 0;
 }
 
 async function getExistingMembership(supabase: SupabaseClient<Database>, userId: string) {

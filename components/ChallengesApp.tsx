@@ -214,22 +214,16 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       {status === "loading" ? <ChallengeState title={t("app.common.loading")} description={t("challenges.loading.description")} /> : null}
       {status === "offline" ? <ChallengeState title={t("app.common.offline")} description={t("challenges.offline.description")} /> : null}
 
-      {availableChallenges.length > 0 ? (
-        <ChallengeSection challenges={availableChallenges} locale={locale} title={t("challenges.available")} userLevel={userLevel} t={t} onOpen={(challenge) => setSelectedChallenge(challenge)} />
-      ) : null}
+      <ChallengeSection challenges={availableChallenges} emptyMessage={t("challenges.emptyArchive")} locale={locale} title={t("challenges.available")} userLevel={userLevel} t={t} onOpen={(challenge) => setSelectedChallenge(challenge)} />
 
-      {acceptedChallenges.length > 0 ? (
-        <ChallengeSection challenges={acceptedChallenges} locale={locale} title={t("challenges.accepted")} userLevel={userLevel} t={t} onOpen={(challenge) => setSelectedChallenge(challenge)} />
-      ) : null}
+      <ChallengeSection challenges={acceptedChallenges} emptyMessage={t("challenges.emptyArchive")} locale={locale} title={t("challenges.accepted")} userLevel={userLevel} t={t} onOpen={(challenge) => setSelectedChallenge(challenge)} />
 
-      {completedChallenges.length > 0 ? (
-        <section className="challenge-section">
-          <button className="challenge-archive-link" type="button" onClick={() => setCompletedOpen(true)}>
-            <span>{t("challenges.completedPlural")}</span>
-            <strong>{completedChallenges.length}</strong>
-          </button>
-        </section>
-      ) : null}
+      <section className="challenge-section">
+        <button className="challenge-archive-link" type="button" onClick={() => setCompletedOpen(true)}>
+          <span>{t("challenges.completedPlural")}</span>
+          <strong>{completedChallenges.length}</strong>
+        </button>
+      </section>
 
       {selectedChallenge ? (
         <ChallengeDetailModal
@@ -287,6 +281,7 @@ function ChallengeArchiveScreen({
 
 function ChallengeSection({
   challenges,
+  emptyMessage,
   locale,
   title,
   userLevel,
@@ -294,6 +289,7 @@ function ChallengeSection({
   onOpen
 }: {
   challenges: Challenge[];
+  emptyMessage: string;
   locale: AppLocale;
   title: string;
   userLevel: number;
@@ -303,11 +299,15 @@ function ChallengeSection({
   return (
     <section className="challenge-section">
       <h2>{title}</h2>
-      <div className="challenge-list">
-        {challenges.map((challenge) => (
-          <ChallengeRow challenge={challenge} key={challenge.id} locale={locale} userLevel={userLevel} t={t} onOpen={() => onOpen(challenge)} />
-        ))}
-      </div>
+      {challenges.length === 0 ? (
+        <div className="task-empty">{emptyMessage}</div>
+      ) : (
+        <div className="challenge-list">
+          {challenges.map((challenge) => (
+            <ChallengeRow challenge={challenge} key={challenge.id} locale={locale} userLevel={userLevel} t={t} onOpen={() => onOpen(challenge)} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
