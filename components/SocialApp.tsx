@@ -1,7 +1,8 @@
 "use client";
 
-import { Copy, Languages, Link, RefreshCw, Share2, UserRound, Users } from "lucide-react";
+import { Bell, ChevronDown, ChevronUp, Copy, Languages, Link, RefreshCw, Share2, UserRound, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { useUserContext } from "@/components/UserProvider";
 import type { AppLocale } from "@/lib/i18n";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
@@ -27,6 +28,23 @@ type TeamContext = {
   directMembers: Array<{ userId: string; assignedAt: string; profile: TeamProfile | null }>;
   error?: string;
 };
+type TeamRewardDay = {
+  bonus_date: string;
+  reward_amount: number;
+  source_count: number;
+  created_at: string;
+};
+type CoreNotificationRow = {
+  accrual_date: string;
+  core_amount: number;
+  wallet_amount: number;
+  created_at: string;
+};
+type PayoutNotification = {
+  id: string;
+  title: string;
+  body: string;
+};
 
 export default function SocialApp({ activeTab, refreshNonce }: { activeTab: SocialTab; refreshNonce: number }) {
   const { user, profile, loading, refreshing, error, locale, refreshUserData, setLocale, t } = useUserContext();
@@ -34,6 +52,13 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
   const [teamContext, setTeamContext] = useState<TeamContext | null>(null);
   const [socialError, setSocialError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [teamRewardsOpen, setTeamRewardsOpen] = useState(false);
+  const [teamRewards, setTeamRewards] = useState<TeamRewardDay[] | null>(null);
+  const [teamRewardsLoading, setTeamRewardsLoading] = useState(false);
+  const [teamRewardsError, setTeamRewardsError] = useState<string | null>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<PayoutNotification[] | null>(null);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
 
   useEffect(() => {
     refreshUserData().catch((refreshError) => {
@@ -69,6 +94,10 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
     if (!user) {
       setReferralLink(null);
       setTeamContext(null);
+      setTeamRewards(null);
+      setTeamRewardsOpen(false);
+      setNotifications(null);
+      setNotificationsOpen(false);
       return;
     }
 
@@ -104,6 +133,48 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
     await copyReferralLink();
   }
 
+  async function toggleTeamRewards() {
+    const nextOpen = !teamRewardsOpen;
+    setTeamRewardsOpen(nextOpen);
+    if (!nextOpen || teamRewards || teamRewardsLoading) return;
+
+    setTeamRewardsLoading(true);
+    setTeamRewardsError(null);
+    try {
+      setTeamRewards(await loadTeamRewardsHistory());
+    } catch (loadError) {
+      console.warn("Team rewards history load failed", loadError);
+      setTeamRewardsError(loadError instanceof Error ? loadError.message : "Failed to load team rewards.");
+    } finally {
+      setTeamRewardsLoading(false);
+    }
+  }
+
+  async function openPayoutNotifications() {
+    if (!user) return;
+    const nextOpen = !notificationsOpen;
+    setNotificationsOpen(nextOpen);
+    if (!nextOpen) return;
+
+    setNotificationsLoading(true);
+    setSocialError(null);
+    try {
+      const lastReadKey = getPayoutReadKey(user.id);
+      const since = window.localStorage.getItem(lastReadKey) ?? "1970-01-01T00:00:00.000Z";
+      const [coreRows, rewardRows] = await Promise.all([
+        loadCoreNotifications(since),
+        loadTeamRewardsHistory(since)
+      ]);
+      setNotifications(buildPayoutNotifications(coreRows, rewardRows, locale));
+      window.localStorage.setItem(lastReadKey, new Date().toISOString());
+    } catch (loadError) {
+      console.warn("Payout notifications load failed", loadError);
+      setSocialError(loadError instanceof Error ? loadError.message : "Failed to load notifications.");
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }
+
   return (
     <section className="social-screen">
       <header className="social-header">
@@ -135,6 +206,31 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
                 <strong>{teamContext?.directMembers.length ?? 0}</strong>
                 <p>{teamContext?.directMembers.length ? teamContext.directMembers.map((member) => formatProfileName(member.profile, member.userId)).join(", ") : t("profile.teams.emptyMembers")}</p>
               </div>
+              <HistoryPanel
+                title={locale === "ru" ? "История лидерских бонусов" : "Team bonus history"}
+                open={teamRewardsOpen}
+                loading={teamRewardsLoading}
+                error={teamRewardsError}
+                emptyText={locale === "ru" ? "Лидерских бонусов пока нет." : "No team bonuses yet."}
+                loadingText={t("app.common.loading")}
+                rowCount={teamRewards?.length ?? 0}
+                onToggle={toggleTeamRewards}
+              >
+                <div className="payout-list">
+                  {(teamRewards ?? []).map((row) => (
+                    <article className="payout-row" key={`${row.bonus_date}-${row.created_at}`}>
+                      <div>
+                        <strong>{formatDay(row.bonus_date, locale)}</strong>
+                        <span>{locale === "ru" ? "Участников" : "Members"}: {row.source_count}</span>
+                      </div>
+                      <div>
+                        <strong>+{formatMoney(row.reward_amount, locale)}</strong>
+                        <span>{locale === "ru" ? "в Core" : "to Core"}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </HistoryPanel>
             </>
           ) : null}
         </section>
@@ -166,6 +262,25 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
             <Languages size={16} />
             {t(nextLocale === "ru" ? "profile.language.ru" : "profile.language.en")}
           </button>
+          <div className="profile-notifications">
+            <button className="finance-icon-button" type="button" aria-label={locale === "ru" ? "Уведомления" : "Notifications"} onClick={openPayoutNotifications}>
+              <Bell size={18} />
+            </button>
+            {notificationsOpen ? (
+              <div className="notification-panel">
+                {notificationsLoading ? <p>{t("app.common.loading")}</p> : null}
+                {!notificationsLoading && notifications?.length ? notifications.map((item) => (
+                  <article className="notification-row" key={item.id}>
+                    <strong>{item.title}</strong>
+                    <p>{item.body}</p>
+                  </article>
+                )) : null}
+                {!notificationsLoading && notifications && notifications.length === 0 ? (
+                  <p>{locale === "ru" ? "Новых поступлений нет." : "No new payouts."}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
           <div className="referral-box">
             <span><Link size={15} />{t("profile.referral.title")}</span>
             <p>{referralLink?.url ?? t("app.common.loading")}</p>
@@ -188,6 +303,45 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
   );
 }
 
+function HistoryPanel({
+  title,
+  open,
+  loading,
+  error,
+  emptyText,
+  loadingText,
+  rowCount,
+  onToggle,
+  children
+}: {
+  title: string;
+  open: boolean;
+  loading: boolean;
+  error: string | null;
+  emptyText: string;
+  loadingText: string;
+  rowCount: number;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className="history-section">
+      <button className="history-toggle" type="button" onClick={onToggle}>
+        <span>{title}</span>
+        {open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+      </button>
+      {open ? (
+        <div className="history-body">
+          {loading ? <p>{loadingText}</p> : null}
+          {error ? <p className="finance-error">{error}</p> : null}
+          {!loading && !error && rowCount > 0 ? children : null}
+          {!loading && !error && rowCount === 0 ? <p>{emptyText}</p> : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 async function getAccessToken(): Promise<string> {
   const supabase = getBrowserSupabaseClient();
   const {
@@ -200,8 +354,78 @@ async function getAccessToken(): Promise<string> {
   return session.access_token;
 }
 
+async function loadTeamRewardsHistory(since?: string): Promise<TeamRewardDay[]> {
+  const token = await getAccessToken();
+  const params = new URLSearchParams({ limit: "30" });
+  if (since) params.set("since", since);
+  const response = await fetch(`/api/teams/rewards-history?${params.toString()}`, {
+    cache: "no-store",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const payload = (await response.json()) as { rows?: TeamRewardDay[]; error?: string };
+  if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load team rewards.");
+  return payload.rows ?? [];
+}
+
+async function loadCoreNotifications(since: string): Promise<CoreNotificationRow[]> {
+  const token = await getAccessToken();
+  const params = new URLSearchParams({ limit: "30", since });
+  const response = await fetch(`/api/core/accrual-history?${params.toString()}`, {
+    cache: "no-store",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const payload = (await response.json()) as { rows?: CoreNotificationRow[]; error?: string };
+  if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load core payouts.");
+  return payload.rows ?? [];
+}
+
+function buildPayoutNotifications(coreRows: CoreNotificationRow[], rewardRows: TeamRewardDay[], locale: AppLocale): PayoutNotification[] {
+  const notifications: PayoutNotification[] = [];
+  const coreAmount = coreRows.reduce((sum, row) => sum + Number(row.core_amount), 0);
+  const walletAmount = coreRows.reduce((sum, row) => sum + Number(row.wallet_amount), 0);
+  const teamAmount = rewardRows.reduce((sum, row) => sum + Number(row.reward_amount), 0);
+
+  if (coreRows.length) {
+    notifications.push({
+      id: "core-payouts",
+      title: locale === "ru" ? "Daily rate начислен" : "Daily rate received",
+      body: `${locale === "ru" ? "Core" : "Core"} +${formatMoney(coreAmount, locale)} · Wallet +${formatMoney(walletAmount, locale)}`
+    });
+  }
+
+  if (teamAmount > 0) {
+    notifications.push({
+      id: "team-bonus",
+      title: locale === "ru" ? "Лидерский бонус начислен" : "Team bonus received",
+      body: `+${formatMoney(teamAmount, locale)} ${locale === "ru" ? "в Core" : "to Core"}`
+    });
+  }
+
+  return notifications;
+}
+
+function getPayoutReadKey(userId: string): string {
+  return `oa:payout-read:${hashText(userId)}`;
+}
+
+function hashText(value: string): string {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
 function formatDate(value: string, locale: AppLocale): string {
   return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
+}
+
+function formatDay(value: string, locale: AppLocale): string {
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00Z`));
+}
+
+function formatMoney(value: number, locale: AppLocale): string {
+  return `${new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)} $`;
 }
 
 function formatLeader(teamContext: TeamContext | null, locale: AppLocale): string {

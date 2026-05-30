@@ -284,6 +284,16 @@ daily_team_delta = current_core_balance - team_bonus_base_balance
 leader_reward = round(daily_team_delta * 10%, 2)
 ```
 
+Текущий статус реализации:
+
+- Подготовлена миграция `20260530112000_daily_core_team_bonus_cron.sql`.
+- Миграция создает ledger `daily_core_accruals` для ежедневного начисления Core/Wallet.
+- Миграция создает ledger `team_core_growth_rewards` для лидерских бонусов.
+- Миграция добавляет функции `run_daily_core_accrual`, `settle_team_bonus_for_member`, `run_daily_team_bonus`, `run_daily_core_and_team_bonus`.
+- Миграция настраивает Supabase `pg_cron` job `open-abundance-daily-core-team-bonus` на запуск каждый день в `00:00 UTC`.
+- Revalidation командной связи при повышении уровня переопределена так, чтобы перед сбросом ненулевого лида вызывать `settle_team_bonus_for_member(..., 'leader_change')`.
+- Клиентский доступ к расчетным `security definer` функциям закрывается через `revoke`; пользователи читают только свои ledger-строки через RLS.
+
 Пример суточного каскада:
 
 1. Daily rate уже начислен всем пользователям.

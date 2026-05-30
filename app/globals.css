@@ -135,6 +135,26 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .referral-box p, .team-summary p { max-width: 100%; overflow-wrap: anywhere; }
 .referral-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .team-summary strong { font-size: 20px; }
+.history-section { width: 100%; margin: 10px 4px 0; }
+.profile-panel .history-section { margin-left: 0; margin-right: 0; }
+.history-toggle { width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-radius: 12px; padding: 0 13px; background: rgba(255,255,255,0.78); color: var(--text); font-weight: 850; text-align: left; box-shadow: 0 8px 20px rgba(25,25,35,0.06); }
+.history-toggle span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-body { display: grid; gap: 8px; margin-top: 8px; border-radius: 12px; padding: 10px; background: rgba(255,255,255,0.72); }
+.history-body > p { margin: 0; color: var(--muted); font-size: 14px; text-align: center; }
+.payout-list { display: grid; gap: 7px; }
+.payout-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; border-radius: 10px; padding: 10px 11px; background: var(--surface); box-shadow: 0 8px 18px rgba(25,25,35,0.05); text-align: left; }
+.payout-row div { min-width: 0; display: grid; gap: 2px; }
+.payout-row strong { overflow: hidden; font-size: 15px; line-height: 1.18; text-overflow: ellipsis; white-space: nowrap; }
+.payout-row div:last-of-type { justify-items: end; text-align: right; }
+.payout-row div:last-of-type strong { color: var(--green); }
+.payout-row span, .payout-row p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.25; }
+.payout-row p { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.profile-notifications { position: relative; width: 100%; display: grid; justify-items: center; margin-top: 2px; }
+.notification-panel { width: 100%; display: grid; gap: 8px; margin-top: 8px; border-radius: 12px; padding: 10px; background: #f7f8fb; }
+.notification-panel > p { margin: 0; color: var(--muted); font-size: 14px; }
+.notification-row { display: grid; gap: 3px; border-radius: 10px; padding: 10px 11px; background: var(--surface); text-align: left; box-shadow: 0 8px 18px rgba(25,25,35,0.05); }
+.notification-row strong { font-size: 15px; }
+.notification-row p { margin: 0; color: var(--muted); font-size: 13px; }
 .level-up-modal { justify-items: center; text-align: center; }
 .level-up-modal h2 { margin: 0; font-size: 22px; }
 .level-up-modal p { margin: 0; color: var(--muted); font-size: 16px; line-height: 1.35; }
