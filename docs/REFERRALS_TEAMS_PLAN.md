@@ -207,10 +207,10 @@ create table public.team_core_growth_rewards (
 );
 ```
 
-Для суточного командного бонуса в `public.core_accounts` нужен baseline:
+Для суточного командного бонуса в `public.team_memberships` нужен baseline текущей связи `member -> leader`:
 
 ```sql
-alter table public.core_accounts
+alter table public.team_memberships
 add column if not exists team_bonus_base_balance numeric(30, 12) not null default 0 check (team_bonus_base_balance >= 0),
 add column if not exists team_bonus_base_at timestamptz;
 ```
@@ -330,7 +330,7 @@ leader_reward = round(daily_team_delta * 10%, 2)
 ```sql
 core_accounts.balance numeric(30, 12)
 core ledger core amounts numeric(30, 12)
-core_accounts.team_bonus_base_balance numeric(30, 12)
+team_memberships.team_bonus_base_balance numeric(30, 12)
 team_core_growth_rewards.source_core_delta numeric(30, 12)
 team_core_growth_rewards.reward_amount numeric(20, 2)
 daily_core_rate numeric(12, 10) = 0.0006330000
@@ -684,7 +684,7 @@ API:
 ### Этап 5.1. Командный бонус
 
 - Реализовать ledger `team_core_growth_rewards`.
-- Добавить baseline в `core_accounts`: `team_bonus_base_balance`, `team_bonus_base_at`.
+- Добавить baseline в `team_memberships`: `team_bonus_base_balance`, `team_bonus_base_at`.
 - Запускать командный бонус раз в 24 часа после daily rate.
 - Считать delta как `current_core_balance - team_bonus_base_balance`.
 - Начислять прямому лиду `round(delta * 0.10, 2)`.
@@ -833,7 +833,7 @@ API:
    Решение: Core хранится как `numeric(30, 12)`, потому что он участвует в ежедневном сложном проценте. Daily rate хранится как `numeric(12, 10)` со значением `0.0006330000`. Wallet posting и лидерский `reward_amount` хранятся как `numeric(20, 2)`. Лидерский бонус округляется до `$0.01` при расчете суточного шага.
 
 5. Baseline для командного бонуса.
-   Решение: в `core_accounts` хранится `team_bonus_base_balance` - предыдущая сумма Core, с которой уже начисляли лидерский бонус. После суточного расчета baseline обновляется до текущего Core пользователя.
+   Решение: в `team_memberships` хранится `team_bonus_base_balance` - предыдущая сумма Core участника для текущей связи `member -> leader`, с которой уже начисляли лидерский бонус. После суточного расчета или смены лида baseline обновляется до текущего Core пользователя.
 
 ### Pending Referral Analytics
 

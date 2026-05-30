@@ -39,14 +39,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: "pending_level_1", membership: null });
     }
 
+    const teamBonusBaseBalance = await getCoreBalance(supabase, user.id);
+    const teamBonusBaseAt = new Date().toISOString();
     const membership: TablesInsert<"team_memberships"> = referrerUserId && await canLead(supabase, referrerUserId, user.id, memberLevel)
       ? {
           member_user_id: user.id,
-          leader_user_id: referrerUserId
+          leader_user_id: referrerUserId,
+          team_bonus_base_balance: teamBonusBaseBalance,
+          team_bonus_base_at: teamBonusBaseAt
         }
       : {
           member_user_id: user.id,
-          leader_user_id: null
+          leader_user_id: null,
+          team_bonus_base_balance: teamBonusBaseBalance,
+          team_bonus_base_at: teamBonusBaseAt
         };
 
     const { data: insertedMembership, error: membershipError } = await supabase
@@ -133,6 +139,17 @@ async function getUserLevel(supabase: SupabaseClient<Database>, userId: string):
 
   if (error) throw error;
   return data?.level ?? 0;
+}
+
+async function getCoreBalance(supabase: SupabaseClient<Database>, userId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from("core_accounts")
+    .select("balance")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.balance ?? 0;
 }
 
 async function getExistingMembership(supabase: SupabaseClient<Database>, userId: string) {

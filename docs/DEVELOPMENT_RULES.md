@@ -57,6 +57,16 @@ f:\git\
   abundance-effect-pwa\      new app, main repo
 ```
 
+## Docs Status Updates
+
+When implementing work that already has a matching plan or design document in `docs`, update that document with what was actually completed.
+
+- mark completed stages, assumptions, or decisions where the document has a status/checklist section;
+- if there is no checklist, add a short "Implemented" or "Current Status" note near the relevant section;
+- keep the note factual: what changed, where it lives, and what remains pending;
+- do not rewrite the whole plan just because one implementation detail changed;
+- if no corresponding document exists, do not create one unless the task needs durable product or technical context.
+
 ## UI Text And Translations
 
 Keep the interface quiet and purposeful. Do not add visible explanatory labels, helper text, or repeated captions unless they directly help the current user action.

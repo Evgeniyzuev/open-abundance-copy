@@ -52,7 +52,13 @@ begin
   update public.team_memberships
   set leader_user_id = null,
       assigned_at = now(),
-      is_active = true
+      is_active = true,
+      team_bonus_base_balance = (
+        select balance::numeric(30, 12)
+        from public.core_accounts
+        where user_id = p_member_user_id
+      ),
+      team_bonus_base_at = now()
   where member_user_id = p_member_user_id
     and is_active;
 end;
