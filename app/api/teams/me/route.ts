@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
       .from("team_memberships")
       .select("*")
       .eq("member_user_id", user.id)
+      .eq("is_active", true)
       .maybeSingle();
 
     if (membershipError) {

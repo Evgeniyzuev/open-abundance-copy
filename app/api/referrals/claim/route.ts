@@ -140,6 +140,7 @@ async function getExistingMembership(supabase: SupabaseClient<Database>, userId:
     .from("team_memberships")
     .select("*")
     .eq("member_user_id", userId)
+    .eq("is_active", true)
     .maybeSingle();
 
   if (error) throw error;
