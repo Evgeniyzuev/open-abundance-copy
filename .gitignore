@@ -7,5 +7,7 @@ dist
 .env.*.local
 supabase/.temp
 *.log
+test-results
+playwright-report
 vercel
 .vercel
