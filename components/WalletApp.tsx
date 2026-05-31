@@ -412,20 +412,12 @@ function ReinvestPanel({
         />
       </div>
 
-      <div className="reinvest-presets">
-        {[0, 25, 50, 75, 100].map((preset) => (
-          <button className={Math.round(percent) === preset ? "active" : ""} type="button" key={preset} onClick={() => onChange(String(preset))}>
-            {preset}%
-          </button>
-        ))}
-      </div>
-
       <div className="reinvest-split">
         <span>
           <TrendingUp size={15} />
-          Core +{formatMoney(dailyIncome.toCore, locale)}
+          Core +{formatAdaptiveMoney(dailyIncome.toCore, locale)}
         </span>
-        <span>Wallet +{formatMoney(dailyIncome.toWallet, locale)}</span>
+        <span>Wallet +{formatAdaptiveMoney(dailyIncome.toWallet, locale)}</span>
       </div>
 
       {!valid ? <p className="finance-error inline">{locale === "ru" ? "Введите число от 0 до 100." : "Enter a number from 0 to 100."}</p> : null}
@@ -697,6 +689,23 @@ function FinanceState({ title, description }: { title: string; description: stri
 
 function formatMoney(value: number, locale: AppLocale): string {
   return `${new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number.isFinite(value) ? value : 0)} $`;
+}
+
+function formatAdaptiveMoney(value: number, locale: AppLocale): string {
+  const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
+  if (safeValue === 0) return formatMoney(0, locale);
+
+  const decimals = safeValue >= 1 ? 2 : Math.min(6, Math.max(2, firstNonZeroDecimalPosition(safeValue) + 2));
+  return `${new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(safeValue)} $`;
+}
+
+function firstNonZeroDecimalPosition(value: number): number {
+  let scaled = Math.abs(value);
+  for (let position = 1; position <= 6; position += 1) {
+    scaled *= 10;
+    if (Math.floor(scaled) > 0) return position;
+  }
+  return 4;
 }
 
 function formatPercent(value: number, locale: AppLocale): string {
