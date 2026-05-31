@@ -40,7 +40,7 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
   const [startCore, setStartCore] = useState("0");
   const [dailyAdditions, setDailyAdditions] = useState("10");
   const [simulationReinvest, setSimulationReinvest] = useState("0");
-  const [termValue, setTermValue] = useState("3");
+  const [termValue, setTermValue] = useState("30");
   const [termUnit, setTermUnit] = useState<TermUnit>("years");
   const [targetCore, setTargetCore] = useState("10000");
   const [targetDailyIncome, setTargetDailyIncome] = useState("10");
@@ -547,7 +547,7 @@ function CoreCalculatorPanel({
               </label>
 
               <label className="finance-field">
-                <span>{locale === "ru" ? "Ежедневный прирост" : "Daily additions"}</span>
+                <span>{locale === "ru" ? "Ежедневный прирост/Доход от челленджей" : "Daily additions/Challenge income"}</span>
                 <input type="number" min="0" inputMode="decimal" value={dailyAdditions} onChange={(event) => onDailyAdditionsChange(event.target.value)} />
               </label>
 
