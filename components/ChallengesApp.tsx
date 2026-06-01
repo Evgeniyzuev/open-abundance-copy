@@ -46,6 +46,7 @@ type CheckChallengeResponse = {
 
 const DEFAULT_USER_LEVEL = 1;
 const LEGACY_ACCEPTED_CHALLENGES_CACHE_KEY = "open-abundance:accepted-challenges:v1";
+const SHOW_COMPLETED_CHALLENGES = false;
 
 type ChallengesAppProps = {
   refreshNonce: number;
@@ -101,8 +102,8 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
 
       if (!isMounted()) return;
 
-      const nextChallenges = payload.challenges ?? [];
-      const serverCompletedChallenges = nextChallenges.filter(isCompletedChallenge);
+      const nextChallenges = (payload.challenges ?? []).map(normalizeCompletedChallengeForTest);
+      const serverCompletedChallenges = SHOW_COMPLETED_CHALLENGES ? nextChallenges.filter(isCompletedChallenge) : [];
       const serverAcceptedChallenges = nextChallenges.filter(isActiveChallenge);
       const acceptedIds = new Set(serverAcceptedChallenges.map((challenge) => challenge.id));
       const completedIds = new Set(serverCompletedChallenges.map((challenge) => challenge.id));
@@ -193,7 +194,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     void loadChallenges();
   }
 
-  if (completedOpen) {
+  if (SHOW_COMPLETED_CHALLENGES && completedOpen) {
     return (
       <>
         <ChallengeArchiveScreen
@@ -244,14 +245,16 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
 
       <ChallengeSection challenges={acceptedChallenges} emptyMessage={t("challenges.emptyArchive")} locale={locale} title={t("challenges.accepted")} userLevel={userLevel} t={t} onOpen={(challenge) => setSelectedChallenge(challenge)} />
 
-      <section className="challenge-section">
-        <button className="challenge-archive-link" type="button" onClick={() => {
-          loadChallenges().then(() => setCompletedOpen(true));
-        }}>
-          <span>{t("challenges.completedPlural")}</span>
-          <strong>{completedChallenges.length}</strong>
-        </button>
-      </section>
+      {SHOW_COMPLETED_CHALLENGES ? (
+        <section className="challenge-section">
+          <button className="challenge-archive-link" type="button" onClick={() => {
+            loadChallenges().then(() => setCompletedOpen(true));
+          }}>
+            <span>{t("challenges.completedPlural")}</span>
+            <strong>{completedChallenges.length}</strong>
+          </button>
+        </section>
+      ) : null}
 
       {selectedChallenge ? (
         <ChallengeDetailModal
@@ -609,6 +612,11 @@ function isActiveChallenge(challenge: Challenge): boolean {
 
 function isCompletedChallenge(challenge: Challenge): boolean {
   return challenge.user_challenge_status === "completed";
+}
+
+function normalizeCompletedChallengeForTest(challenge: Challenge): Challenge {
+  if (SHOW_COMPLETED_CHALLENGES || !isCompletedChallenge(challenge)) return challenge;
+  return { ...challenge, user_challenge_status: null };
 }
 
 async function getAccessToken(): Promise<string> {
