@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useUserContext } from "@/components/UserProvider";
 import type { AppLocale } from "@/lib/i18n";
+import { formatAdaptiveMoney as formatMoney } from "@/lib/moneyFormat";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
 
 type SocialTab = "profile" | "teams";
@@ -422,10 +423,6 @@ function formatDate(value: string, locale: AppLocale): string {
 
 function formatDay(value: string, locale: AppLocale): string {
   return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00Z`));
-}
-
-function formatMoney(value: number, locale: AppLocale): string {
-  return `${new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)} $`;
 }
 
 function formatLeader(teamContext: TeamContext | null, locale: AppLocale): string {

@@ -6,6 +6,7 @@ import { Calculator, Check, ChevronDown, ChevronUp, RefreshCw, RotateCcw, Trendi
 import { useUserContext } from "@/components/UserProvider";
 import { calculateDailyIncome, calculateFutureCore, coreRequiredForDailyIncome, daysFromTerm, findDaysToTarget, formatDurationParts, normalizePercent } from "@/lib/coreCalculator";
 import type { AppLocale } from "@/lib/i18n";
+import { formatAdaptiveMoney, formatMoney } from "@/lib/moneyFormat";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
 
 type WalletTab = "wallet" | "core";
@@ -205,6 +206,7 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
             amount={core?.balance ?? 0}
             locale={locale}
             meta={core ? t("wallet.coreMeta", { level: core.level, percent: core.reinvest_percent, date: formatDate(core.updated_at, locale) }) : t("app.common.created")}
+            adaptiveAmount
           />
           <ReinvestPanel
             value={reinvestValue}
@@ -268,7 +270,7 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
             }}
           />
           <HistoryPanel
-            title={locale === "ru" ? "История начислений Core" : "Core payout history"}
+            title={locale === "ru" ? "История Core" : "Core history"}
             open={historyOpen}
             loading={historyLoading}
             error={historyError}
@@ -285,10 +287,10 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
                     <span>{locale === "ru" ? "Daily rate" : "Daily rate"} {formatPercent(row.daily_rate * 100, locale)}</span>
                   </div>
                   <div>
-                    <strong>+{formatMoney(row.core_amount, locale)}</strong>
+                    <strong>+{formatAdaptiveMoney(row.core_amount, locale)}</strong>
                     <span>{locale === "ru" ? "Core" : "to Core"}</span>
                   </div>
-                  <p>{`${formatMoney(row.core_before, locale)} -> ${formatMoney(row.core_after, locale)} · Wallet +${formatMoney(row.wallet_amount, locale)}`}</p>
+                  <p>{`${formatAdaptiveMoney(row.core_before, locale)} -> ${formatAdaptiveMoney(row.core_after, locale)} · Wallet +${formatAdaptiveMoney(row.wallet_amount, locale)}`}</p>
                 </article>
               ))}
             </div>
@@ -666,12 +668,26 @@ async function getAccessToken(): Promise<string> {
   return session.access_token;
 }
 
-function BalancePanel({ title, label, amount, meta, locale }: { title: string; label: string; amount: number; meta: string; locale: AppLocale }) {
+function BalancePanel({
+  title,
+  label,
+  amount,
+  meta,
+  locale,
+  adaptiveAmount = false
+}: {
+  title: string;
+  label: string;
+  amount: number;
+  meta: string;
+  locale: AppLocale;
+  adaptiveAmount?: boolean;
+}) {
   return (
     <section className="balance-panel">
       <span>{title}</span>
       <small>{label}</small>
-      <strong>{formatMoney(amount, locale)}</strong>
+      <strong>{adaptiveAmount ? formatAdaptiveMoney(amount, locale) : formatMoney(amount, locale)}</strong>
       <p>{meta}</p>
     </section>
   );
@@ -684,27 +700,6 @@ function FinanceState({ title, description }: { title: string; description: stri
       <p>{description}</p>
     </div>
   );
-}
-
-function formatMoney(value: number, locale: AppLocale): string {
-  return `${new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number.isFinite(value) ? value : 0)} $`;
-}
-
-function formatAdaptiveMoney(value: number, locale: AppLocale): string {
-  const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
-  if (safeValue === 0) return formatMoney(0, locale);
-
-  const decimals = safeValue >= 1 ? 2 : Math.min(6, Math.max(2, firstNonZeroDecimalPosition(safeValue) + 2));
-  return `${new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(safeValue)} $`;
-}
-
-function firstNonZeroDecimalPosition(value: number): number {
-  let scaled = Math.abs(value);
-  for (let position = 1; position <= 6; position += 1) {
-    scaled *= 10;
-    if (Math.floor(scaled) > 0) return position;
-  }
-  return 4;
 }
 
 function formatPercent(value: number, locale: AppLocale): string {
