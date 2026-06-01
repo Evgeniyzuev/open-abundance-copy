@@ -94,6 +94,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      setUser(session.user);
+      setProfile(null);
+      setCore(null);
+      setWallet(null);
+
       const response = await fetch(`/api/user/context?ts=${Date.now()}`, {
         cache: "no-store",
         headers: {
@@ -112,6 +117,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setCore(payload.core);
       setWallet(payload.wallet);
     } catch (refreshError) {
+      setProfile(null);
+      setCore(null);
+      setWallet(null);
       setError(refreshError instanceof Error ? refreshError.message : "Failed to refresh user data.");
     } finally {
       setLoading(false);

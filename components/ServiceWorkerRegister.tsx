@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 
 const APP_UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+const LOCAL_SW_RELOAD_KEY = "open-abundance:local-sw-cleaned:v1";
+const APP_SW_RELOAD_KEY = "open-abundance:sw-updated:v1";
 
 export default function ServiceWorkerRegister() {
   useEffect(() => {
@@ -14,6 +16,15 @@ export default function ServiceWorkerRegister() {
         .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
         .then(() => caches.keys())
         .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+        .then(() => {
+          if (navigator.serviceWorker.controller && window.sessionStorage.getItem(LOCAL_SW_RELOAD_KEY) !== "1") {
+            window.sessionStorage.setItem(LOCAL_SW_RELOAD_KEY, "1");
+            window.location.reload();
+            return;
+          }
+
+          window.sessionStorage.removeItem(LOCAL_SW_RELOAD_KEY);
+        })
         .catch((error) => {
           console.warn("Local service worker cleanup failed", error);
         });
@@ -22,6 +33,20 @@ export default function ServiceWorkerRegister() {
 
     let lastUpdateCheckAt = 0;
     let removeVisibilityListener: (() => void) | undefined;
+    let removeControllerChangeListener: (() => void) | undefined;
+
+    const handleControllerChange = () => {
+      if (window.sessionStorage.getItem(APP_SW_RELOAD_KEY) === "1") {
+        window.sessionStorage.removeItem(APP_SW_RELOAD_KEY);
+        return;
+      }
+
+      window.sessionStorage.setItem(APP_SW_RELOAD_KEY, "1");
+      window.location.reload();
+    };
+
+    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+    removeControllerChangeListener = () => navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
 
     async function checkForAppUpdate(registration?: ServiceWorkerRegistration) {
       const now = Date.now();
@@ -52,6 +77,7 @@ export default function ServiceWorkerRegister() {
 
     return () => {
       removeVisibilityListener?.();
+      removeControllerChangeListener?.();
     };
   }, []);
 

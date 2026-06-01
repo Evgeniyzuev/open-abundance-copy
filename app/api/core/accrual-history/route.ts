@@ -40,7 +40,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: historyError.message }, { status: 500 });
     }
 
-    return NextResponse.json({ rows: (data ?? []) as CoreAccrualRow[] }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(
+      { rows: (data ?? []) as CoreAccrualRow[] },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+          "CDN-Cache-Control": "no-store",
+          "Pragma": "no-cache"
+        }
+      }
+    );
   } catch (routeError) {
     return NextResponse.json(
       { error: routeError instanceof Error ? routeError.message : "Failed to load core accrual history." },

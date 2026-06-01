@@ -14,7 +14,16 @@ export async function GET(request: NextRequest) {
   }
 
   if (!accessToken) {
-    return NextResponse.json({ user: null, profile: null, core: null, wallet: null });
+    return NextResponse.json(
+      { user: null, profile: null, core: null, wallet: null },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+          "CDN-Cache-Control": "no-store",
+          "Pragma": "no-cache"
+        }
+      }
+    );
   }
 
   const supabase = createClient<Database>(supabaseUrl, serviceRoleKey, {

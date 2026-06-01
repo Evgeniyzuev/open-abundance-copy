@@ -17,7 +17,7 @@ type WishesResponse = {
 
 type LocaleText = Json;
 
-const WISHES_CACHE_KEY = "open-abundance:recommended-wishes:v2";
+const LEGACY_WISHES_CACHE_KEY = "open-abundance:recommended-wishes:v2";
 
 type RecommendedWishesProps = {
   refreshNonce: number;
@@ -34,22 +34,24 @@ export default function RecommendedWishes({ refreshNonce }: RecommendedWishesPro
     let mounted = true;
 
     async function loadWishes() {
-      const cachedWishes = readCachedWishes();
-
-      if (cachedWishes.length > 0) {
-        setWishes(cachedWishes);
-        setStatus("ready");
-      }
+      setWishes([]);
+      setSelectedWish(null);
+      setStatus("loading");
 
       if (!navigator.onLine) {
-        setStatus(cachedWishes.length > 0 ? "ready" : "offline");
+        setStatus("offline");
         return;
       }
 
-      setIsRefreshing(cachedWishes.length > 0);
+      setIsRefreshing(true);
 
       try {
-        const response = await fetch("/api/recommended-wishes", { cache: "no-store" });
+        const response = await fetch(`/api/recommended-wishes?ts=${Date.now()}`, {
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache"
+          }
+        });
         const payload = (await response.json()) as WishesResponse;
 
         if (!response.ok || payload.error) {
@@ -59,16 +61,19 @@ export default function RecommendedWishes({ refreshNonce }: RecommendedWishesPro
         if (mounted) {
           const nextWishes = payload.wishes ?? [];
           setWishes(nextWishes);
-          writeCachedWishes(nextWishes);
           setStatus("ready");
         }
       } catch {
-        if (mounted) setStatus(cachedWishes.length > 0 ? "ready" : "offline");
+        if (mounted) {
+          setWishes([]);
+          setStatus("offline");
+        }
       } finally {
         if (mounted) setIsRefreshing(false);
       }
     }
 
+    window.localStorage.removeItem(LEGACY_WISHES_CACHE_KEY);
     loadWishes();
     return () => {
       mounted = false;
@@ -149,23 +154,4 @@ function text(value: LocaleText, locale: AppLocale): string {
   }
 
   return "";
-}
-
-function readCachedWishes(): RecommendedWish[] {
-  try {
-    const value = window.localStorage.getItem(WISHES_CACHE_KEY);
-    if (!value) return [];
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? (parsed as RecommendedWish[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeCachedWishes(wishes: RecommendedWish[]) {
-  try {
-    window.localStorage.setItem(WISHES_CACHE_KEY, JSON.stringify(wishes));
-  } catch {
-    // Cache is a convenience layer only.
-  }
 }

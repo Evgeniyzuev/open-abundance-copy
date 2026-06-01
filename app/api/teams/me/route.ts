@@ -50,7 +50,13 @@ export async function GET(request: NextRequest) {
           : { type: "system", profile: null },
           directMembers
         },
-      { headers: { "Cache-Control": "no-store" } }
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+          "CDN-Cache-Control": "no-store",
+          "Pragma": "no-cache"
+        }
+      }
     );
   } catch (routeError) {
     return NextResponse.json(
