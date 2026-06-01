@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
-import type { Database, Json } from "@/lib/database.types";
+import type { Database } from "@/lib/database.types";
 
 type ProgressRequest = {
   verificationLogic?: string;
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
 
   const { data: challenge, error: challengeError } = await supabase
     .from("challenges")
-    .select("*")
+    .select("id")
     .eq("is_active", true)
     .eq("verification_logic", body.verificationLogic)
     .order("sort_order", { ascending: true })
@@ -54,46 +54,48 @@ export async function POST(request: NextRequest) {
   }
 
   if (!challenge) {
-    return NextResponse.json({ completed: false, reason: "Challenge not found." });
+    return NextResponse.json({ recorded: false, reason: "Challenge not found." });
   }
 
-  const rewardAmount = getRewardAmount(challenge.reward_label);
-  const { data: completion, error: completionError } = await supabase.rpc("complete_user_challenge", {
-    p_user_id: user.id,
-    p_challenge_id: challenge.id,
-    p_reward_account: "core",
-    p_reward_amount: rewardAmount
-  });
+  const { data: existing, error: existingError } = await supabase
+    .from("user_challenges")
+    .select("status,verification_data")
+    .eq("user_id", user.id)
+    .eq("challenge_id", challenge.id)
+    .maybeSingle();
 
-  if (completionError) {
-    return NextResponse.json({ error: completionError.message }, { status: 500 });
+  if (existingError) {
+    return NextResponse.json({ error: existingError.message }, { status: 500 });
   }
 
-  const result = completion?.[0];
-  return NextResponse.json({
-    completed: true,
-    rewardClaimed: Boolean(result?.reward_claimed),
-    rewardAccount: result?.rewarded_account ?? "core",
-    rewardAmount: Number(result?.rewarded_amount ?? rewardAmount)
-  });
+  if (existing?.status === "completed") {
+    return NextResponse.json({ recorded: true, status: "completed" });
+  }
+
+  const verificationData = {
+    ...(isRecord(existing?.verification_data) ? existing.verification_data : {}),
+    calculated: true,
+    calculated_at: new Date().toISOString()
+  };
+
+  const { error: upsertError } = await supabase.from("user_challenges").upsert(
+    {
+      user_id: user.id,
+      challenge_id: challenge.id,
+      status: existing?.status ?? "accepted",
+      verification_data: verificationData,
+      updated_at: new Date().toISOString()
+    },
+    { onConflict: "user_id,challenge_id" }
+  );
+
+  if (upsertError) {
+    return NextResponse.json({ error: upsertError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ recorded: true, status: existing?.status ?? "accepted" });
 }
 
-function getRewardAmount(value: Json): number {
-  const raw = rewardLabelText(value);
-  const amount = raw.match(/(\d+(?:[.,]\d+)?)\s*\$/)?.[1] ?? raw.match(/\+(\d+(?:[.,]\d+)?)/)?.[1] ?? raw.match(/(\d+(?:[.,]\d+)?)/)?.[1];
-  return amount ? Number(amount.replace(",", ".")) : 1;
-}
-
-function rewardLabelText(value: Json): string {
-  if (typeof value === "string") return value;
-  if (typeof value === "number") return String(value);
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const record = value as Record<string, Json | undefined>;
-    const en = record.en;
-    const ru = record.ru;
-    if (typeof en === "string") return en;
-    if (typeof ru === "string") return ru;
-  }
-
-  return "1$";
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

@@ -199,14 +199,16 @@ Time to target:
 
 ## Challenge Integration
 
-В старом проекте расчет срока отмечал прогресс `calculate_time_to_goal`.
+Калькулятор не должен менять Core, Wallet или любые ledger/balance значения. Расчет срока может записать только proof для челленджа `calculate_time_to_goal`.
 
-Для нового проекта:
+Правильный flow:
 
-- после первого успешного расчета в режиме `Time to goal` отправить progress `{ calculated: true }`;
-- не привязывать выполнение челленджа к сохранению reinvest;
-- если endpoint для challenge progress уже есть, использовать его;
-- если нет, добавить отдельным следующим этапом, чтобы калькулятор не зависел от челленджей.
+- первое успешное использование калькулятора пишет `user_challenges.verification_data.calculated = true`;
+- эта запись может создать/обновить `user_challenges` со статусом `accepted`, но не вызывает `complete_user_challenge`;
+- баланс не меняется от использования калькулятора;
+- пользователь открывает челлендж и нажимает "Проверить";
+- `/api/challenges/check` читает proof из `verification_data`;
+- только после успешной проверки вызывается `complete_user_challenge`, показывается поздравление и начисляется reward.
 
 ## Implementation Steps
 
@@ -226,7 +228,7 @@ Time to target:
    - target недостижим;
    - дробный `reinvest_percent`.
 6. Добавить разворачиваемую Calculator panel.
-7. Подключить challenge progress для `calculate_time_to_goal`.
+7. Подключить challenge proof для `calculate_time_to_goal` без начисления баланса из калькулятора.
 8. Прогнать `pnpm lint`, `pnpm exec tsc --noEmit` и e2e smoke.
 
 ## Acceptance Criteria

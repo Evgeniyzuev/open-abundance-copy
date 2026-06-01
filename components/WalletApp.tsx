@@ -133,7 +133,7 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
     setSimulationReinvest(value);
   }
 
-  async function recordCalculatorChallenge() {
+  async function recordCalculatorChallengeProgress() {
     if (!user) return;
 
     try {
@@ -147,7 +147,6 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
         },
         body: JSON.stringify({ verificationLogic: "calculate_time_to_goal" })
       });
-      await refreshUserData();
     } catch (challengeError) {
       console.warn("Calculator challenge progress failed", challengeError);
     }
@@ -265,7 +264,7 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
             targetCalculationTouched={targetCalculationTouched}
             onCalculateTarget={() => {
               setTargetCalculationTouched(true);
-              recordCalculatorChallenge();
+              recordCalculatorChallengeProgress();
             }}
           />
           <HistoryPanel

@@ -122,6 +122,26 @@ async function verifyChallenge(
     return { ok: true };
   }
 
+  if (challenge.verification_logic === "calculate_time_to_goal") {
+    const { data: progress, error: progressError } = await supabase
+      .from("user_challenges")
+      .select("verification_data")
+      .eq("user_id", userId)
+      .eq("challenge_id", challenge.id)
+      .maybeSingle();
+
+    if (progressError) {
+      return { ok: false, reason: "Could not check calculator progress. Try again." };
+    }
+
+    const verificationData = progress?.verification_data;
+    if (isRecord(verificationData) && verificationData.calculated === true) {
+      return { ok: true };
+    }
+
+    return { ok: false, reason: "Use the Core calculator first, then check this challenge." };
+  }
+
   return { ok: false, reason: "Verification is not connected for this challenge yet." };
 }
 
@@ -147,4 +167,8 @@ function rewardLabelText(value: Json): string {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
