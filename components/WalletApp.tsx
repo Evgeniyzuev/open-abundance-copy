@@ -21,6 +21,16 @@ type CoreAccrualRow = {
   core_after: number;
   created_at: string;
 };
+type WalletHistoryRow = {
+  id: string;
+  operation_date: string;
+  kind: "daily_core_payout";
+  amount: number;
+  daily_rate: number;
+  gross_amount: number;
+  reinvest_percent: number;
+  created_at: string;
+};
 type CalculatorMode = "future" | "target";
 type TargetKind = "core" | "daily";
 type TermUnit = "days" | "months" | "years";
@@ -31,6 +41,10 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
   const [historyRows, setHistoryRows] = useState<CoreAccrualRow[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [walletHistoryOpen, setWalletHistoryOpen] = useState(false);
+  const [walletHistoryRows, setWalletHistoryRows] = useState<WalletHistoryRow[] | null>(null);
+  const [walletHistoryLoading, setWalletHistoryLoading] = useState(false);
+  const [walletHistoryError, setWalletHistoryError] = useState<string | null>(null);
   const [reinvestValue, setReinvestValue] = useState("0");
   const [reinvestSaving, setReinvestSaving] = useState(false);
   const [reinvestError, setReinvestError] = useState<string | null>(null);
@@ -55,12 +69,15 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
 
   useEffect(() => {
     if (activeTab !== "core") setHistoryOpen(false);
+    if (activeTab !== "wallet") setWalletHistoryOpen(false);
   }, [activeTab]);
 
   useEffect(() => {
     if (!user) {
       setHistoryRows(null);
       setHistoryOpen(false);
+      setWalletHistoryRows(null);
+      setWalletHistoryOpen(false);
     }
   }, [user]);
 
@@ -89,6 +106,23 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
       setHistoryError(loadError instanceof Error ? loadError.message : "Failed to load core history.");
     } finally {
       setHistoryLoading(false);
+    }
+  }
+
+  async function toggleWalletHistory() {
+    const nextOpen = !walletHistoryOpen;
+    setWalletHistoryOpen(nextOpen);
+    if (!nextOpen || walletHistoryRows || walletHistoryLoading) return;
+
+    setWalletHistoryLoading(true);
+    setWalletHistoryError(null);
+    try {
+      setWalletHistoryRows(await loadWalletHistory());
+    } catch (loadError) {
+      console.warn("Wallet history load failed", loadError);
+      setWalletHistoryError(loadError instanceof Error ? loadError.message : "Failed to load wallet history.");
+    } finally {
+      setWalletHistoryLoading(false);
     }
   }
 
@@ -189,13 +223,41 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
       ) : null}
 
       {user && activeTab === "wallet" ? (
-        <BalancePanel
-          title="Wallet"
-          label={t("wallet.availableBalance")}
-          amount={wallet?.balance ?? 0}
-          locale={locale}
-          meta={wallet ? t("app.common.updated", { date: formatDate(wallet.updated_at, locale) }) : t("app.common.created")}
-        />
+        <>
+          <BalancePanel
+            title="Wallet"
+            label={t("wallet.availableBalance")}
+            amount={wallet?.balance ?? 0}
+            locale={locale}
+            meta={wallet ? t("app.common.updated", { date: formatDate(wallet.updated_at, locale) }) : t("app.common.created")}
+          />
+          <HistoryPanel
+            title={locale === "ru" ? "История Wallet" : "Wallet history"}
+            open={walletHistoryOpen}
+            loading={walletHistoryLoading}
+            error={walletHistoryError}
+            emptyText={locale === "ru" ? "Операций пока нет." : "No operations yet."}
+            loadingText={t("app.common.loading")}
+            rowCount={walletHistoryRows?.length ?? 0}
+            onToggle={toggleWalletHistory}
+          >
+            <div className="payout-list">
+              {(walletHistoryRows ?? []).map((row) => (
+                <article className="payout-row" key={row.id}>
+                  <div>
+                    <strong>{formatDay(row.operation_date, locale)}</strong>
+                    <span>{locale === "ru" ? "Daily Core payout" : "Daily Core payout"}</span>
+                  </div>
+                  <div>
+                    <strong>+{formatMoney(row.amount, locale)}</strong>
+                    <span>Wallet</span>
+                  </div>
+                  <p>{`${locale === "ru" ? "Daily rate" : "Daily rate"} ${formatPercent(row.daily_rate * 100, locale)} · ${locale === "ru" ? "Реинвест" : "Reinvest"} ${formatPercentCompact(row.reinvest_percent, locale)}`}</p>
+                </article>
+              ))}
+            </div>
+          </HistoryPanel>
+        </>
       ) : null}
 
       {user && activeTab === "core" ? (
@@ -653,6 +715,17 @@ async function loadCoreAccrualHistory(): Promise<CoreAccrualRow[]> {
   });
   const payload = (await response.json()) as { rows?: CoreAccrualRow[]; error?: string };
   if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load core history.");
+  return payload.rows ?? [];
+}
+
+async function loadWalletHistory(): Promise<WalletHistoryRow[]> {
+  const token = await getAccessToken();
+  const response = await fetch("/api/wallet/history?limit=30", {
+    cache: "no-store",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const payload = (await response.json()) as { rows?: WalletHistoryRow[]; error?: string };
+  if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load wallet history.");
   return payload.rows ?? [];
 }
 

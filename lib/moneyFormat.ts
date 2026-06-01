@@ -13,7 +13,11 @@ export function formatAdaptiveMoney(value: number, locale: AppLocale): string {
   const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
   if (safeValue === 0) return formatMoney(0, locale);
 
-  const decimals = safeValue >= 1 ? 2 : Math.min(6, Math.max(2, firstNonZeroDecimalPosition(safeValue) + 2));
+  if (safeValue >= 1) {
+    return `${new Intl.NumberFormat(localeCode(locale), { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(safeValue)} $`;
+  }
+
+  const decimals = Math.min(6, Math.max(2, firstNonZeroDecimalPosition(safeValue) + 2));
   return `${new Intl.NumberFormat(localeCode(locale), { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(safeValue)} $`;
 }
 
