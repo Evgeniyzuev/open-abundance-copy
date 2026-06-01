@@ -62,17 +62,28 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
   const [notificationsLoading, setNotificationsLoading] = useState(false);
 
   useEffect(() => {
-    refreshUserData().catch((refreshError) => {
-      console.warn("Profile refresh failed", refreshError);
-    });
-  }, [activeTab, refreshNonce, refreshUserData]);
+    setSocialError(null);
+    setCopied(false);
+    setReferralLink(null);
+    setTeamContext(null);
+    setTeamRewards(null);
+    setTeamRewardsOpen(false);
+    setTeamRewardsLoading(false);
+    setTeamRewardsError(null);
+    setNotifications(null);
+    setNotificationsOpen(false);
+    setNotificationsLoading(false);
+  }, [activeTab, refreshNonce, user?.id]);
 
   const loadReferralLink = useCallback(async () => {
     if (!user) return;
     const session = await getAccessToken();
-    const response = await fetch("/api/referrals/me", {
+    const response = await fetch(`/api/referrals/me?ts=${Date.now()}`, {
       cache: "no-store",
-      headers: { Authorization: `Bearer ${session}` }
+      headers: {
+        Authorization: `Bearer ${session}`,
+        "Cache-Control": "no-cache"
+      }
     });
     const payload = (await response.json()) as ReferralLink & { error?: string };
     if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load referral link.");
@@ -82,9 +93,12 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
   const loadTeamContext = useCallback(async () => {
     if (!user) return;
     const session = await getAccessToken();
-    const response = await fetch("/api/teams/me", {
+    const response = await fetch(`/api/teams/me?ts=${Date.now()}`, {
       cache: "no-store",
-      headers: { Authorization: `Bearer ${session}` }
+      headers: {
+        Authorization: `Bearer ${session}`,
+        "Cache-Control": "no-cache"
+      }
     });
     const payload = (await response.json()) as TeamContext;
     if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load team.");
@@ -102,12 +116,16 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
       return;
     }
 
+    if (!navigator.onLine) {
+      return;
+    }
+
     const load = activeTab === "teams" ? loadTeamContext : loadReferralLink;
     load().catch((loadError) => {
       console.warn("Social data load failed", loadError);
       setSocialError(loadError instanceof Error ? loadError.message : "Failed to load social data.");
     });
-  }, [activeTab, loadReferralLink, loadTeamContext, user]);
+  }, [activeTab, loadReferralLink, loadTeamContext, refreshNonce, user]);
 
   const displayName = profile?.display_name ?? user?.email ?? t("profile.guest");
   const handle = profile?.username ? `@${profile.username}` : user?.email ?? t("profile.localMode");
@@ -158,16 +176,14 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
     if (!nextOpen) return;
 
     setNotificationsLoading(true);
+    setNotifications(null);
     setSocialError(null);
     try {
-      const lastReadKey = getPayoutReadKey(user.id);
-      const since = window.localStorage.getItem(lastReadKey) ?? "1970-01-01T00:00:00.000Z";
       const [coreRows, rewardRows] = await Promise.all([
-        loadCoreNotifications(since),
-        loadTeamRewardsHistory(since)
+        loadCoreNotifications(),
+        loadTeamRewardsHistory()
       ]);
       setNotifications(buildPayoutNotifications(coreRows, rewardRows, locale));
-      window.localStorage.setItem(lastReadKey, new Date().toISOString());
     } catch (loadError) {
       console.warn("Payout notifications load failed", loadError);
       setSocialError(loadError instanceof Error ? loadError.message : "Failed to load notifications.");
@@ -357,23 +373,30 @@ async function getAccessToken(): Promise<string> {
 
 async function loadTeamRewardsHistory(since?: string): Promise<TeamRewardDay[]> {
   const token = await getAccessToken();
-  const params = new URLSearchParams({ limit: "30" });
+  const params = new URLSearchParams({ limit: "30", ts: String(Date.now()) });
   if (since) params.set("since", since);
   const response = await fetch(`/api/teams/rewards-history?${params.toString()}`, {
     cache: "no-store",
-    headers: { Authorization: `Bearer ${token}` }
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Cache-Control": "no-cache"
+    }
   });
   const payload = (await response.json()) as { rows?: TeamRewardDay[]; error?: string };
   if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load team rewards.");
   return payload.rows ?? [];
 }
 
-async function loadCoreNotifications(since: string): Promise<CoreNotificationRow[]> {
+async function loadCoreNotifications(since?: string): Promise<CoreNotificationRow[]> {
   const token = await getAccessToken();
-  const params = new URLSearchParams({ limit: "30", since });
+  const params = new URLSearchParams({ limit: "30", ts: String(Date.now()) });
+  if (since) params.set("since", since);
   const response = await fetch(`/api/core/accrual-history?${params.toString()}`, {
     cache: "no-store",
-    headers: { Authorization: `Bearer ${token}` }
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Cache-Control": "no-cache"
+    }
   });
   const payload = (await response.json()) as { rows?: CoreNotificationRow[]; error?: string };
   if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load core payouts.");
@@ -403,18 +426,6 @@ function buildPayoutNotifications(coreRows: CoreNotificationRow[], rewardRows: T
   }
 
   return notifications;
-}
-
-function getPayoutReadKey(userId: string): string {
-  return `oa:payout-read:${hashText(userId)}`;
-}
-
-function hashText(value: string): string {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) | 0;
-  }
-  return Math.abs(hash).toString(36);
 }
 
 function formatDate(value: string, locale: AppLocale): string {

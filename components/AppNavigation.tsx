@@ -70,7 +70,7 @@ const PULL_THRESHOLD_PX = 72;
 const NAV_HIDE_DELTA_PX = 8;
 
 export default function AppNavigation({ notesSlot }: AppNavigationProps) {
-  const { t } = useUserContext();
+  const { refreshUserData, t } = useUserContext();
   const [activeMainTab, setActiveMainTab] = useState<MainTabId>("goals");
   const [activeGoalTab, setActiveGoalTab] = useState<GoalTabId>("notes");
   const [activeWalletTab, setActiveWalletTab] = useState<WalletTabId>("wallet");
@@ -125,10 +125,21 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   }, [activeMainTab, activeGoalTab, activeWalletTab, activeSocialTab]);
 
   useEffect(() => {
+    if (!isServerBackedView(activeMainTab, activeGoalTab)) return;
+
+    refreshUserData().catch((refreshError) => {
+      console.warn("Server-backed tab refresh failed", refreshError);
+    });
+  }, [activeGoalTab, activeMainTab, activeSocialTab, activeWalletTab, refreshUserData]);
+
+  useEffect(() => {
     const requestRefresh = () => {
       const now = Date.now();
       if (now - lastRefreshAtRef.current < REFRESH_COOLDOWN_MS) return;
       lastRefreshAtRef.current = now;
+      refreshUserData().catch((refreshError) => {
+        console.warn("Pull-to-refresh user data failed", refreshError);
+      });
       setRefreshNonce((value) => value + 1);
     };
 
@@ -177,7 +188,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
       window.removeEventListener("touchend", handleTouchEnd);
       window.removeEventListener("touchcancel", handleTouchEnd);
     };
-  }, [updateNavFromScrollIntent]);
+  }, [refreshUserData, updateNavFromScrollIntent]);
 
   const currentTitle = getCurrentTitle(activeMainTab, activeGoalTab, t);
   const showNotes = activeMainTab === "goals" && activeGoalTab === "notes";
@@ -324,4 +335,9 @@ function getCurrentTitle(mainTab: MainTabId, goalTab: GoalTabId, t: TFunction): 
   if (mainTab !== "goals") return getMainTabTitle(mainTab, t);
   const titleKey = goalTabs.find((item) => item.id === goalTab)?.titleKey;
   return titleKey ? t(titleKey) : t("app.nav.goals");
+}
+
+function isServerBackedView(mainTab: MainTabId, goalTab: GoalTabId): boolean {
+  if (mainTab === "challenges" || mainTab === "wallet" || mainTab === "people") return true;
+  return mainTab === "goals" && goalTab === "desires";
 }

@@ -33,6 +33,8 @@ type UserContextResponse = {
   error?: string;
 };
 
+const SERVER_FETCH_TIMEOUT_MS = 5_000;
+
 const UserContext = createContext<UserContextValue | undefined>(undefined);
 
 export function UserProvider({ children }: { children: ReactNode }) {
@@ -73,12 +75,27 @@ export function UserProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = locale;
   }, [locale]);
 
+  const clearServerData = useCallback(() => {
+    setUser(null);
+    setProfile(null);
+    setCore(null);
+    setWallet(null);
+  }, []);
+
   const refreshUserData = useCallback(async () => {
-    const supabase = getBrowserSupabaseClient();
     setRefreshing(true);
     setError(null);
+    setProfile(null);
+    setCore(null);
+    setWallet(null);
 
     try {
+      if (isOffline()) {
+        clearServerData();
+        return;
+      }
+
+      const supabase = getBrowserSupabaseClient();
       const {
         data: { session },
         error: sessionError
@@ -87,14 +104,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (sessionError) throw sessionError;
 
       if (!session?.access_token) {
-        setUser(null);
-        setProfile(null);
-        setCore(null);
-        setWallet(null);
+        clearServerData();
         return;
       }
 
-      const response = await fetch(`/api/user/context?ts=${Date.now()}`, {
+      const response = await fetchWithTimeout(`/api/user/context?ts=${Date.now()}`, {
         cache: "no-store",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -112,18 +126,27 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setCore(payload.core);
       setWallet(payload.wallet);
     } catch (refreshError) {
+      clearServerData();
       setError(refreshError instanceof Error ? refreshError.message : "Failed to refresh user data.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [clearServerData]);
 
   useEffect(() => {
     let mounted = true;
     const supabase = getBrowserSupabaseClient();
 
     async function bootstrapUser() {
+      if (isOffline()) {
+        if (mounted) {
+          clearServerData();
+          setLoading(false);
+        }
+        return;
+      }
+
       const guest = await getOrCreateLocalGuest();
       const {
         data: { session }
@@ -179,6 +202,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
+  }, [clearServerData, refreshUserData]);
+
+  useEffect(() => {
+    const refreshAfterReconnect = () => {
+      refreshUserData().catch((refreshError) => {
+        console.warn("User reconnect refresh failed", refreshError);
+      });
+    };
+
+    window.addEventListener("online", refreshAfterReconnect);
+    return () => window.removeEventListener("online", refreshAfterReconnect);
   }, [refreshUserData]);
 
   useEffect(() => {
@@ -292,6 +326,21 @@ export function useUserContext(): UserContextValue {
   const value = useContext(UserContext);
   if (!value) throw new Error("useUserContext must be used inside UserProvider.");
   return value;
+}
+
+function isOffline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), SERVER_FETCH_TIMEOUT_MS);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 function LevelUpModal({

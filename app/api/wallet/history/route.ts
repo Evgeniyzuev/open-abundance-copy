@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { NO_STORE_HEADERS } from "@/lib/httpCache";
 import { getAuthenticatedUser } from "@/lib/serverSupabase";
 
 type WalletHistoryRow = {
@@ -21,11 +22,13 @@ type DailyCoreAccrualRow = {
   created_at: string;
 };
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const { supabase, user, error } = await getAuthenticatedUser(request);
     if (error || !user) {
-      return NextResponse.json({ error }, { status: 401 });
+      return NextResponse.json({ error }, { status: 401, headers: NO_STORE_HEADERS });
     }
 
     const limit = clampLimit(request.nextUrl.searchParams.get("limit"));
@@ -39,7 +42,7 @@ export async function GET(request: NextRequest) {
       .limit(limit);
 
     if (historyError) {
-      return NextResponse.json({ error: historyError.message }, { status: 500 });
+      return NextResponse.json({ error: historyError.message }, { status: 500, headers: NO_STORE_HEADERS });
     }
 
     const rows: WalletHistoryRow[] = ((data ?? []) as DailyCoreAccrualRow[]).map((row) => ({
@@ -55,18 +58,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       { rows },
-      {
-        headers: {
-          "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
-          "CDN-Cache-Control": "no-store",
-          "Pragma": "no-cache"
-        }
-      }
+      { headers: NO_STORE_HEADERS }
     );
   } catch (routeError) {
     return NextResponse.json(
       { error: routeError instanceof Error ? routeError.message : "Failed to load wallet history." },
-      { status: 500 }
+      { status: 500, headers: NO_STORE_HEADERS }
     );
   }
 }

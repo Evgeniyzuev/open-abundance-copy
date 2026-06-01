@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { NO_STORE_HEADERS } from "@/lib/httpCache";
 import { getAuthenticatedUser } from "@/lib/serverSupabase";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
     const { supabase, user, error } = await getAuthenticatedUser(request);
     if (error || !user) {
-      return NextResponse.json({ error }, { status: 401 });
+      return NextResponse.json({ error }, { status: 401, headers: NO_STORE_HEADERS });
     }
 
     const { data: membership, error: membershipError } = await supabase
@@ -16,7 +19,7 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     if (membershipError) {
-      return NextResponse.json({ error: membershipError.message }, { status: 500 });
+      return NextResponse.json({ error: membershipError.message }, { status: 500, headers: NO_STORE_HEADERS });
     }
 
     const { data: directMemberships, error: membersError } = await supabase
@@ -27,7 +30,7 @@ export async function GET(request: NextRequest) {
       .order("assigned_at", { ascending: false });
 
     if (membersError) {
-      return NextResponse.json({ error: membersError.message }, { status: 500 });
+      return NextResponse.json({ error: membersError.message }, { status: 500, headers: NO_STORE_HEADERS });
     }
 
     const leaderProfile = membership?.leader_user_id
@@ -50,12 +53,12 @@ export async function GET(request: NextRequest) {
           : { type: "system", profile: null },
           directMembers
         },
-      { headers: { "Cache-Control": "no-store" } }
+      { headers: NO_STORE_HEADERS }
     );
   } catch (routeError) {
     return NextResponse.json(
       { error: routeError instanceof Error ? routeError.message : "Failed to load team." },
-      { status: 500 }
+      { status: 500, headers: NO_STORE_HEADERS }
     );
   }
 }

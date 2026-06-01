@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { NO_STORE_HEADERS } from "@/lib/httpCache";
 import type { Database } from "@/lib/database.types";
 
 export const dynamic = "force-dynamic";
@@ -10,11 +11,11 @@ export async function GET(request: NextRequest) {
   const accessToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
   if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json({ error: "Supabase server environment variables are missing." }, { status: 500 });
+    return NextResponse.json({ error: "Supabase server environment variables are missing." }, { status: 500, headers: NO_STORE_HEADERS });
   }
 
   if (!accessToken) {
-    return NextResponse.json({ user: null, profile: null, core: null, wallet: null });
+    return NextResponse.json({ user: null, profile: null, core: null, wallet: null }, { headers: NO_STORE_HEADERS });
   }
 
   const supabase = createClient<Database>(supabaseUrl, serviceRoleKey, {
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser(accessToken);
 
   if (userError || !user) {
-    return NextResponse.json({ error: "Session expired. Sign in again." }, { status: 401 });
+    return NextResponse.json({ error: "Session expired. Sign in again." }, { status: 401, headers: NO_STORE_HEADERS });
   }
 
   const [profileResult, coreResult, walletResult] = await Promise.all([
@@ -39,9 +40,9 @@ export async function GET(request: NextRequest) {
     supabase.from("wallet_accounts").select("*").eq("user_id", user.id).maybeSingle()
   ]);
 
-  if (profileResult.error) return NextResponse.json({ error: profileResult.error.message }, { status: 500 });
-  if (coreResult.error) return NextResponse.json({ error: coreResult.error.message }, { status: 500 });
-  if (walletResult.error) return NextResponse.json({ error: walletResult.error.message }, { status: 500 });
+  if (profileResult.error) return NextResponse.json({ error: profileResult.error.message }, { status: 500, headers: NO_STORE_HEADERS });
+  if (coreResult.error) return NextResponse.json({ error: coreResult.error.message }, { status: 500, headers: NO_STORE_HEADERS });
+  if (walletResult.error) return NextResponse.json({ error: walletResult.error.message }, { status: 500, headers: NO_STORE_HEADERS });
 
   return NextResponse.json(
     {
@@ -50,12 +51,6 @@ export async function GET(request: NextRequest) {
       core: coreResult.data,
       wallet: walletResult.data
     },
-    {
-      headers: {
-        "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
-        "CDN-Cache-Control": "no-store",
-        "Pragma": "no-cache"
-      }
-    }
+    { headers: NO_STORE_HEADERS }
   );
 }

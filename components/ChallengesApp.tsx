@@ -45,7 +45,6 @@ type CheckChallengeResponse = {
 };
 
 const DEFAULT_USER_LEVEL = 1;
-const LEGACY_ACCEPTED_CHALLENGES_CACHE_KEY = "open-abundance:accepted-challenges:v1";
 
 type ChallengesAppProps = {
   refreshNonce: number;
@@ -121,10 +120,6 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     } finally {
       if (isMounted()) setIsRefreshing(false);
     }
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.removeItem(LEGACY_ACCEPTED_CHALLENGES_CACHE_KEY);
   }, []);
 
   useEffect(() => {

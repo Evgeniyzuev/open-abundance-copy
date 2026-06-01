@@ -62,15 +62,82 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
   const [targetCalculationTouched, setTargetCalculationTouched] = useState(false);
 
   useEffect(() => {
-    refreshUserData().catch((refreshError) => {
-      console.warn("Wallet refresh failed", refreshError);
-    });
-  }, [activeTab, refreshNonce, refreshUserData]);
-
-  useEffect(() => {
     if (activeTab !== "core") setHistoryOpen(false);
     if (activeTab !== "wallet") setWalletHistoryOpen(false);
   }, [activeTab]);
+
+  useEffect(() => {
+    setHistoryRows(null);
+    setHistoryLoading(false);
+    setHistoryError(null);
+    setWalletHistoryRows(null);
+    setWalletHistoryLoading(false);
+    setWalletHistoryError(null);
+  }, [activeTab, refreshNonce, user?.id]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadHistory() {
+      if (activeTab !== "core" || !historyOpen || !user) return;
+
+      setHistoryRows(null);
+      setHistoryError(null);
+
+      if (!navigator.onLine) {
+        setHistoryLoading(false);
+        return;
+      }
+
+      setHistoryLoading(true);
+      try {
+        const rows = await loadCoreAccrualHistory();
+        if (mounted) setHistoryRows(rows);
+      } catch (loadError) {
+        console.warn("Core accrual history load failed", loadError);
+        if (mounted) setHistoryError(loadError instanceof Error ? loadError.message : "Failed to load core history.");
+      } finally {
+        if (mounted) setHistoryLoading(false);
+      }
+    }
+
+    loadHistory();
+    return () => {
+      mounted = false;
+    };
+  }, [activeTab, historyOpen, refreshNonce, user]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadHistory() {
+      if (activeTab !== "wallet" || !walletHistoryOpen || !user) return;
+
+      setWalletHistoryRows(null);
+      setWalletHistoryError(null);
+
+      if (!navigator.onLine) {
+        setWalletHistoryLoading(false);
+        return;
+      }
+
+      setWalletHistoryLoading(true);
+      try {
+        const rows = await loadWalletHistory();
+        if (mounted) setWalletHistoryRows(rows);
+      } catch (loadError) {
+        console.warn("Wallet history load failed", loadError);
+        if (mounted) setWalletHistoryError(loadError instanceof Error ? loadError.message : "Failed to load wallet history.");
+      } finally {
+        if (mounted) setWalletHistoryLoading(false);
+      }
+    }
+
+    loadHistory();
+    return () => {
+      mounted = false;
+    };
+  }, [activeTab, refreshNonce, user, walletHistoryOpen]);
 
   useEffect(() => {
     if (!user) {
@@ -92,38 +159,16 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
     setStartCore(formatInputNumber(core.balance));
   }, [core?.balance, core, useCurrentCore]);
 
-  async function toggleCoreHistory() {
+  function toggleCoreHistory() {
     const nextOpen = !historyOpen;
     setHistoryOpen(nextOpen);
-    if (!nextOpen || historyRows || historyLoading) return;
-
-    setHistoryLoading(true);
-    setHistoryError(null);
-    try {
-      setHistoryRows(await loadCoreAccrualHistory());
-    } catch (loadError) {
-      console.warn("Core accrual history load failed", loadError);
-      setHistoryError(loadError instanceof Error ? loadError.message : "Failed to load core history.");
-    } finally {
-      setHistoryLoading(false);
-    }
+    if (nextOpen) setHistoryRows(null);
   }
 
-  async function toggleWalletHistory() {
+  function toggleWalletHistory() {
     const nextOpen = !walletHistoryOpen;
     setWalletHistoryOpen(nextOpen);
-    if (!nextOpen || walletHistoryRows || walletHistoryLoading) return;
-
-    setWalletHistoryLoading(true);
-    setWalletHistoryError(null);
-    try {
-      setWalletHistoryRows(await loadWalletHistory());
-    } catch (loadError) {
-      console.warn("Wallet history load failed", loadError);
-      setWalletHistoryError(loadError instanceof Error ? loadError.message : "Failed to load wallet history.");
-    } finally {
-      setWalletHistoryLoading(false);
-    }
+    if (nextOpen) setWalletHistoryRows(null);
   }
 
   async function saveReinvestPercent() {
@@ -709,9 +754,12 @@ function TargetResult({ calculation, locale }: { calculation: ReturnType<typeof 
 
 async function loadCoreAccrualHistory(): Promise<CoreAccrualRow[]> {
   const token = await getAccessToken();
-  const response = await fetch("/api/core/accrual-history?limit=30", {
+  const response = await fetch(`/api/core/accrual-history?limit=30&ts=${Date.now()}`, {
     cache: "no-store",
-    headers: { Authorization: `Bearer ${token}` }
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Cache-Control": "no-cache"
+    }
   });
   const payload = (await response.json()) as { rows?: CoreAccrualRow[]; error?: string };
   if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load core history.");
@@ -720,9 +768,12 @@ async function loadCoreAccrualHistory(): Promise<CoreAccrualRow[]> {
 
 async function loadWalletHistory(): Promise<WalletHistoryRow[]> {
   const token = await getAccessToken();
-  const response = await fetch("/api/wallet/history?limit=30", {
+  const response = await fetch(`/api/wallet/history?limit=30&ts=${Date.now()}`, {
     cache: "no-store",
-    headers: { Authorization: `Bearer ${token}` }
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Cache-Control": "no-cache"
+    }
   });
   const payload = (await response.json()) as { rows?: WalletHistoryRow[]; error?: string };
   if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load wallet history.");

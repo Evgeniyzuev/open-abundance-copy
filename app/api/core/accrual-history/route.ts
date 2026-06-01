@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { NO_STORE_HEADERS } from "@/lib/httpCache";
 import { getAuthenticatedUser } from "@/lib/serverSupabase";
 
 type CoreAccrualRow = {
@@ -13,11 +14,13 @@ type CoreAccrualRow = {
   created_at: string;
 };
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const { supabase, user, error } = await getAuthenticatedUser(request);
     if (error || !user) {
-      return NextResponse.json({ error }, { status: 401 });
+      return NextResponse.json({ error }, { status: 401, headers: NO_STORE_HEADERS });
     }
 
     const limit = clampLimit(request.nextUrl.searchParams.get("limit"));
@@ -37,14 +40,14 @@ export async function GET(request: NextRequest) {
     const { data, error: historyError } = await query;
 
     if (historyError) {
-      return NextResponse.json({ error: historyError.message }, { status: 500 });
+      return NextResponse.json({ error: historyError.message }, { status: 500, headers: NO_STORE_HEADERS });
     }
 
-    return NextResponse.json({ rows: (data ?? []) as CoreAccrualRow[] }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ rows: (data ?? []) as CoreAccrualRow[] }, { headers: NO_STORE_HEADERS });
   } catch (routeError) {
     return NextResponse.json(
       { error: routeError instanceof Error ? routeError.message : "Failed to load core accrual history." },
-      { status: 500 }
+      { status: 500, headers: NO_STORE_HEADERS }
     );
   }
 }
