@@ -80,8 +80,15 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     try {
       const supabase = getBrowserSupabaseClient();
       const {
-        data: { session }
+        data: { session },
+        error: sessionError
       } = await supabase.auth.getSession();
+
+      if (sessionError) throw sessionError;
+      if (user && !session?.access_token) {
+        throw new Error("Supabase session is missing.");
+      }
+
       const headers = new Headers({
         "Cache-Control": "no-cache"
       });
@@ -122,7 +129,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     } finally {
       if (isMounted()) setIsRefreshing(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     window.localStorage.removeItem(LEGACY_ACCEPTED_CHALLENGES_CACHE_KEY);
