@@ -44,7 +44,6 @@ type CheckChallengeResponse = {
   error?: string;
 };
 
-const ACCEPTED_CHALLENGES_CACHE_KEY = "open-abundance:accepted-challenges:v1";
 const DEFAULT_USER_LEVEL = 1;
 
 type ChallengesAppProps = {
@@ -63,30 +62,33 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   const { user, profile, core, locale, refreshUserData, t } = useUserContext();
   const userLevel = core?.level ?? profile?.level ?? DEFAULT_USER_LEVEL;
 
-  const loadChallenges = useCallback(async ({ primeFromCache = true, isMounted = () => true }: { primeFromCache?: boolean; isMounted?: () => boolean } = {}) => {
-    const cachedAcceptedChallenges = readCachedAcceptedChallenges().filter(isActiveChallenge);
-
-    if (primeFromCache && cachedAcceptedChallenges.length > 0) {
-      setAcceptedChallenges(cachedAcceptedChallenges);
-      setStatus("ready");
-    }
-
+  const loadChallenges = useCallback(async ({ isMounted = () => true }: { isMounted?: () => boolean } = {}) => {
     if (!navigator.onLine) {
       setAvailableChallenges([]);
-      setStatus(cachedAcceptedChallenges.length > 0 ? "ready" : "offline");
+      setAcceptedChallenges([]);
+      setCompletedChallenges([]);
+      setStatus("offline");
       return;
     }
 
-    setIsRefreshing(cachedAcceptedChallenges.length > 0);
+    setIsRefreshing(true);
 
     try {
       const supabase = getBrowserSupabaseClient();
       const {
         data: { session }
       } = await supabase.auth.getSession();
-      const response = await fetch("/api/challenges", {
+      const headers = new Headers({
+        "Cache-Control": "no-cache"
+      });
+
+      if (session?.access_token) {
+        headers.set("Authorization", `Bearer ${session.access_token}`);
+      }
+
+      const response = await fetch(`/api/challenges?ts=${Date.now()}`, {
         cache: "no-store",
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined
+        headers
       });
       const payload = (await response.json()) as ChallengesResponse;
 
@@ -99,23 +101,19 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       const nextChallenges = payload.challenges ?? [];
       const serverCompletedChallenges = nextChallenges.filter(isCompletedChallenge);
       const serverAcceptedChallenges = nextChallenges.filter(isActiveChallenge);
-      const mergedAcceptedChallenges = mergeChallengeLists(cachedAcceptedChallenges, serverAcceptedChallenges);
-      const acceptedIds = new Set(mergedAcceptedChallenges.map((challenge) => challenge.id));
+      const acceptedIds = new Set(serverAcceptedChallenges.map((challenge) => challenge.id));
       const completedIds = new Set(serverCompletedChallenges.map((challenge) => challenge.id));
-      const syncedAcceptedChallenges = mergedAcceptedChallenges.map((cachedChallenge) => {
-        const freshChallenge = nextChallenges.find((challenge) => challenge.id === cachedChallenge.id);
-        return freshChallenge ? { ...cachedChallenge, ...freshChallenge } : cachedChallenge;
-      }).filter(isActiveChallenge);
 
-      setAcceptedChallenges(syncedAcceptedChallenges);
+      setAcceptedChallenges(serverAcceptedChallenges);
       setCompletedChallenges(serverCompletedChallenges);
-      writeCachedAcceptedChallenges(syncedAcceptedChallenges);
       setAvailableChallenges(nextChallenges.filter((challenge) => !acceptedIds.has(challenge.id) && !completedIds.has(challenge.id)));
       setStatus("ready");
     } catch {
       if (isMounted()) {
         setAvailableChallenges([]);
-        setStatus(cachedAcceptedChallenges.length > 0 ? "ready" : "offline");
+        setAcceptedChallenges([]);
+        setCompletedChallenges([]);
+        setStatus("offline");
       }
     } finally {
       if (isMounted()) setIsRefreshing(false);
@@ -147,7 +145,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
 
     const refreshVisibleChallenges = () => {
       if (document.visibilityState === "visible") {
-        loadChallenges({ primeFromCache: false, isMounted: () => mounted });
+        loadChallenges({ isMounted: () => mounted });
       }
     };
 
@@ -166,7 +164,6 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     const nextAcceptedChallenges = mergeAcceptedChallenges(acceptedChallenges, acceptedChallenge);
     setAcceptedChallenges(nextAcceptedChallenges);
     setAvailableChallenges((challenges) => challenges.filter((item) => item.id !== challenge.id));
-    writeCachedAcceptedChallenges(nextAcceptedChallenges);
     setSelectedChallenge(null);
   }
 
@@ -181,7 +178,6 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     setAcceptedChallenges(nextAcceptedChallenges);
     setCompletedChallenges(nextCompletedChallenges);
     setAvailableChallenges((challenges) => challenges.filter((item) => item.id !== challenge.id));
-    writeCachedAcceptedChallenges(nextAcceptedChallenges);
     setSelectedChallenge(completedChallenge);
     setCompletionReward(reward);
   }
@@ -239,7 +235,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
 
       <section className="challenge-section">
         <button className="challenge-archive-link" type="button" onClick={() => {
-          loadChallenges({ primeFromCache: false });
+          loadChallenges();
           setCompletedOpen(true);
         }}>
           <span>{t("challenges.completedPlural")}</span>
@@ -582,25 +578,6 @@ function getVerificationLabel(type: Challenge["verification_type"], t: TFunction
   return t("challenges.verification.manual");
 }
 
-function readCachedAcceptedChallenges(): Challenge[] {
-  try {
-    const value = window.localStorage.getItem(ACCEPTED_CHALLENGES_CACHE_KEY);
-    if (!value) return [];
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? (parsed as Challenge[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeCachedAcceptedChallenges(challenges: Challenge[]) {
-  try {
-    window.localStorage.setItem(ACCEPTED_CHALLENGES_CACHE_KEY, JSON.stringify(challenges.filter(isActiveChallenge)));
-  } catch {
-    // Accepted challenges remain usable even when local cache writes fail.
-  }
-}
-
 function isActiveChallenge(challenge: Challenge): boolean {
   return challenge.user_challenge_status === "accepted" || challenge.user_challenge_status === "failed";
 }
@@ -611,19 +588,6 @@ function isCompletedChallenge(challenge: Challenge): boolean {
 
 function mergeAcceptedChallenges(challenges: Challenge[], challenge: Challenge): Challenge[] {
   return challenges.some((item) => item.id === challenge.id) ? challenges : [challenge, ...challenges];
-}
-
-function mergeChallengeLists(first: Challenge[], second: Challenge[]): Challenge[] {
-  const merged = [...first];
-  second.forEach((challenge) => {
-    const index = merged.findIndex((item) => item.id === challenge.id);
-    if (index >= 0) {
-      merged[index] = { ...merged[index], ...challenge };
-    } else {
-      merged.push(challenge);
-    }
-  });
-  return merged;
 }
 
 function rewardLabelText(value: RewardLabel, locale: AppLocale): string {

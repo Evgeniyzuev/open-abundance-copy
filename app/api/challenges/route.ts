@@ -59,7 +59,9 @@ export async function GET(request: NextRequest) {
     { challenges: data },
     {
       headers: {
-        "Cache-Control": "no-store"
+        "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+        "CDN-Cache-Control": "no-store",
+        "Pragma": "no-cache"
       }
     }
   );
