@@ -2,6 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import type { Database } from "@/lib/database.types";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -49,7 +51,11 @@ export async function GET(request: NextRequest) {
       wallet: walletResult.data
     },
     {
-      headers: { "Cache-Control": "no-store" }
+      headers: {
+        "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+        "CDN-Cache-Control": "no-store",
+        "Pragma": "no-cache"
+      }
     }
   );
 }

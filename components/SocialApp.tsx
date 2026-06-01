@@ -48,7 +48,7 @@ type PayoutNotification = {
 };
 
 export default function SocialApp({ activeTab, refreshNonce }: { activeTab: SocialTab; refreshNonce: number }) {
-  const { user, profile, loading, refreshing, error, locale, refreshUserData, setLocale, t } = useUserContext();
+  const { user, profile, core, loading, refreshing, error, locale, refreshUserData, setLocale, t } = useUserContext();
   const [referralLink, setReferralLink] = useState<ReferralLink | null>(null);
   const [teamContext, setTeamContext] = useState<TeamContext | null>(null);
   const [socialError, setSocialError] = useState<string | null>(null);
@@ -255,7 +255,7 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
           <strong>{displayName}</strong>
           <p>{handle}</p>
           <div className="profile-facts">
-            <span>Lvl {profile?.level ?? 0}</span>
+            <span>Lvl {core?.level ?? profile?.level ?? 0}</span>
             <span>{t("profile.created", { date: profile ? formatDate(profile.created_at, locale) : "..." })}</span>
             <span>{locale.toUpperCase()}</span>
           </div>

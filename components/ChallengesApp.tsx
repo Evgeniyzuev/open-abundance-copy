@@ -45,6 +45,7 @@ type CheckChallengeResponse = {
 };
 
 const DEFAULT_USER_LEVEL = 1;
+const LEGACY_ACCEPTED_CHALLENGES_CACHE_KEY = "open-abundance:accepted-challenges:v1";
 
 type ChallengesAppProps = {
   refreshNonce: number;
@@ -63,10 +64,12 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   const userLevel = core?.level ?? profile?.level ?? DEFAULT_USER_LEVEL;
 
   const loadChallenges = useCallback(async ({ isMounted = () => true }: { isMounted?: () => boolean } = {}) => {
+    setStatus("loading");
+    setAvailableChallenges([]);
+    setAcceptedChallenges([]);
+    setCompletedChallenges([]);
+
     if (!navigator.onLine) {
-      setAvailableChallenges([]);
-      setAcceptedChallenges([]);
-      setCompletedChallenges([]);
       setStatus("offline");
       return;
     }
@@ -121,6 +124,10 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   }, []);
 
   useEffect(() => {
+    window.localStorage.removeItem(LEGACY_ACCEPTED_CHALLENGES_CACHE_KEY);
+  }, []);
+
+  useEffect(() => {
     if (!selectedChallenge && !completionReward) return;
 
     const previousOverflow = document.body.style.overflow;
@@ -159,27 +166,31 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     };
   }, [loadChallenges]);
 
-  function acceptChallenge(challenge: Challenge) {
-    const acceptedChallenge: Challenge = { ...challenge, user_challenge_status: "accepted" };
-    const nextAcceptedChallenges = mergeAcceptedChallenges(acceptedChallenges, acceptedChallenge);
-    setAcceptedChallenges(nextAcceptedChallenges);
-    setAvailableChallenges((challenges) => challenges.filter((item) => item.id !== challenge.id));
+  async function acceptChallenge(challenge: Challenge) {
+    const token = await getAccessToken();
+    const response = await fetch("/api/challenges/accept", {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ challengeId: challenge.id })
+    });
+    const payload = (await response.json()) as { error?: string };
+
+    if (!response.ok || payload.error) {
+      throw new Error(payload.error ?? "Failed to accept challenge.");
+    }
+
     setSelectedChallenge(null);
+    await loadChallenges();
   }
 
   function completeChallenge(challenge: Challenge, reward: { amount: number; account: string; claimed: boolean }) {
-    const completedChallenge: Challenge = {
-      ...challenge,
-      user_challenge_status: "completed"
-    };
-    const nextAcceptedChallenges = acceptedChallenges.filter((item) => item.id !== completedChallenge.id);
-    const nextCompletedChallenges = [completedChallenge, ...completedChallenges.filter((item) => item.id !== completedChallenge.id)];
-
-    setAcceptedChallenges(nextAcceptedChallenges);
-    setCompletedChallenges(nextCompletedChallenges);
-    setAvailableChallenges((challenges) => challenges.filter((item) => item.id !== challenge.id));
-    setSelectedChallenge(completedChallenge);
+    setSelectedChallenge({ ...challenge, user_challenge_status: "completed" });
     setCompletionReward(reward);
+    void loadChallenges();
   }
 
   if (completedOpen) {
@@ -235,8 +246,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
 
       <section className="challenge-section">
         <button className="challenge-archive-link" type="button" onClick={() => {
-          loadChallenges();
-          setCompletedOpen(true);
+          loadChallenges().then(() => setCompletedOpen(true));
         }}>
           <span>{t("challenges.completedPlural")}</span>
           <strong>{completedChallenges.length}</strong>
@@ -370,7 +380,7 @@ function ChallengeDetailModal({
   locale: AppLocale;
   userLevel: number;
   t: TFunction;
-  onAccept: () => void;
+  onAccept: () => Promise<void>;
   onClose: () => void;
   onComplete: (challenge: Challenge, reward: { amount: number; account: string; claimed: boolean }) => void;
   onRefreshUserData: () => Promise<void>;
@@ -380,6 +390,7 @@ function ChallengeDetailModal({
   const accepted = isActiveChallenge(challenge);
   const locked = !accepted && challenge.difficulty_level > userLevel;
   const [authStatus, setAuthStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [acceptStatus, setAcceptStatus] = useState<"idle" | "loading" | "error">("idle");
   const [checkStatus, setCheckStatus] = useState<"idle" | "loading" | "error">("idle");
   const [checkMessage, setCheckMessage] = useState<string | null>(null);
 
@@ -443,6 +454,20 @@ function ChallengeDetailModal({
       console.error(error);
       setCheckMessage(error instanceof Error ? error.message : t("challenges.checkFailed"));
       setCheckStatus("error");
+    }
+  }
+
+  async function handleAccept() {
+    setAcceptStatus("loading");
+    setCheckMessage(null);
+
+    try {
+      await onAccept();
+      setAcceptStatus("idle");
+    } catch (error) {
+      console.error(error);
+      setCheckMessage(error instanceof Error ? error.message : t("challenges.checkFailed"));
+      setAcceptStatus("error");
     }
   }
 
@@ -521,13 +546,13 @@ function ChallengeDetailModal({
           ) : null}
 
           {!completed && !locked && !accepted && (!signupChallenge || isRegistered) ? (
-            <button className="challenge-primary-action" type="button" onClick={onAccept}>
-              {t("challenges.accept")}
+            <button className="challenge-primary-action" type="button" disabled={acceptStatus === "loading"} onClick={handleAccept}>
+              {acceptStatus === "loading" ? t("app.common.loading") : t("challenges.accept")}
             </button>
           ) : null}
 
           {authStatus === "error" ? <p className="challenge-error">{t("challenges.authError")}</p> : null}
-          {checkMessage ? <p className={checkStatus === "error" ? "challenge-error" : "challenge-note"}>{checkMessage}</p> : null}
+          {checkMessage ? <p className={checkStatus === "error" || acceptStatus === "error" ? "challenge-error" : "challenge-note"}>{checkMessage}</p> : null}
         </div>
       </div>
     </div>
@@ -586,8 +611,16 @@ function isCompletedChallenge(challenge: Challenge): boolean {
   return challenge.user_challenge_status === "completed";
 }
 
-function mergeAcceptedChallenges(challenges: Challenge[], challenge: Challenge): Challenge[] {
-  return challenges.some((item) => item.id === challenge.id) ? challenges : [challenge, ...challenges];
+async function getAccessToken(): Promise<string> {
+  const supabase = getBrowserSupabaseClient();
+  const {
+    data: { session },
+    error
+  } = await supabase.auth.getSession();
+
+  if (error) throw error;
+  if (!session?.access_token) throw new Error("Supabase session is missing.");
+  return session.access_token;
 }
 
 function rewardLabelText(value: RewardLabel, locale: AppLocale): string {

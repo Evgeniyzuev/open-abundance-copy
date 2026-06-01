@@ -1,4 +1,4 @@
-const CACHE_NAME = "open-abundance-v3";
+const CACHE_NAME = "open-abundance-v4";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -33,7 +33,7 @@ self.addEventListener("fetch", (event) => {
           return response;
         }).catch(() => cached);
 
-        return cached || fetchPromise;
+        return fetchPromise;
       })
     );
     return;

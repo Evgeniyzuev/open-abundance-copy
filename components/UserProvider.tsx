@@ -94,9 +94,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const response = await fetch("/api/user/context", {
+      const response = await fetch(`/api/user/context?ts=${Date.now()}`, {
         cache: "no-store",
-        headers: { Authorization: `Bearer ${session.access_token}` }
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Cache-Control": "no-cache"
+        }
       });
       const payload = (await response.json()) as UserContextResponse;
 
