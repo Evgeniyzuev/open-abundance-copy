@@ -204,7 +204,7 @@ Time to target:
 Правильный flow:
 
 - первое успешное использование калькулятора пишет `user_challenges.verification_data.calculated = true`;
-- эта запись может создать/обновить `user_challenges` со статусом `accepted`, но не вызывает `complete_user_challenge`;
+- если записи `user_challenges` еще нет, proof-запись создается со статусом `accepted`, чтобы челлендж появился в "Принятые";
 - баланс не меняется от использования калькулятора;
 - пользователь открывает челлендж и нажимает "Проверить";
 - `/api/challenges/check` читает proof из `verification_data`;

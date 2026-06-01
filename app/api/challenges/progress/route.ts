@@ -77,12 +77,13 @@ export async function POST(request: NextRequest) {
     calculated: true,
     calculated_at: new Date().toISOString()
   };
+  const nextStatus = existing?.status && existing.status !== "declined" ? existing.status : "accepted";
 
   const { error: upsertError } = await supabase.from("user_challenges").upsert(
     {
       user_id: user.id,
       challenge_id: challenge.id,
-      status: existing?.status ?? "accepted",
+      status: nextStatus,
       verification_data: verificationData,
       updated_at: new Date().toISOString()
     },
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: upsertError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ recorded: true, status: existing?.status ?? "accepted" });
+  return NextResponse.json({ recorded: true, status: nextStatus });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

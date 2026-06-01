@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Clock3, ShieldCheck, Trophy } from "lucide-react";
 import { getOrCreateLocalGuest } from "@/lib/guestIdentity";
 import { getBrowserSupabaseClient, signInWithGoogle } from "@/lib/supabaseClient";
@@ -63,6 +63,65 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   const { user, profile, core, locale, refreshUserData, t } = useUserContext();
   const userLevel = core?.level ?? profile?.level ?? DEFAULT_USER_LEVEL;
 
+  const loadChallenges = useCallback(async ({ primeFromCache = true, isMounted = () => true }: { primeFromCache?: boolean; isMounted?: () => boolean } = {}) => {
+    const cachedAcceptedChallenges = readCachedAcceptedChallenges().filter(isActiveChallenge);
+
+    if (primeFromCache && cachedAcceptedChallenges.length > 0) {
+      setAcceptedChallenges(cachedAcceptedChallenges);
+      setStatus("ready");
+    }
+
+    if (!navigator.onLine) {
+      setAvailableChallenges([]);
+      setStatus(cachedAcceptedChallenges.length > 0 ? "ready" : "offline");
+      return;
+    }
+
+    setIsRefreshing(cachedAcceptedChallenges.length > 0);
+
+    try {
+      const supabase = getBrowserSupabaseClient();
+      const {
+        data: { session }
+      } = await supabase.auth.getSession();
+      const response = await fetch("/api/challenges", {
+        cache: "no-store",
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined
+      });
+      const payload = (await response.json()) as ChallengesResponse;
+
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error ?? "Failed to load challenges.");
+      }
+
+      if (!isMounted()) return;
+
+      const nextChallenges = payload.challenges ?? [];
+      const serverCompletedChallenges = nextChallenges.filter(isCompletedChallenge);
+      const serverAcceptedChallenges = nextChallenges.filter(isActiveChallenge);
+      const mergedAcceptedChallenges = mergeChallengeLists(cachedAcceptedChallenges, serverAcceptedChallenges);
+      const acceptedIds = new Set(mergedAcceptedChallenges.map((challenge) => challenge.id));
+      const completedIds = new Set(serverCompletedChallenges.map((challenge) => challenge.id));
+      const syncedAcceptedChallenges = mergedAcceptedChallenges.map((cachedChallenge) => {
+        const freshChallenge = nextChallenges.find((challenge) => challenge.id === cachedChallenge.id);
+        return freshChallenge ? { ...cachedChallenge, ...freshChallenge } : cachedChallenge;
+      }).filter(isActiveChallenge);
+
+      setAcceptedChallenges(syncedAcceptedChallenges);
+      setCompletedChallenges(serverCompletedChallenges);
+      writeCachedAcceptedChallenges(syncedAcceptedChallenges);
+      setAvailableChallenges(nextChallenges.filter((challenge) => !acceptedIds.has(challenge.id) && !completedIds.has(challenge.id)));
+      setStatus("ready");
+    } catch {
+      if (isMounted()) {
+        setAvailableChallenges([]);
+        setStatus(cachedAcceptedChallenges.length > 0 ? "ready" : "offline");
+      }
+    } finally {
+      if (isMounted()) setIsRefreshing(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!selectedChallenge && !completionReward) return;
 
@@ -77,70 +136,30 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   useEffect(() => {
     let mounted = true;
 
-    async function loadChallenges() {
-      const cachedAcceptedChallenges = readCachedAcceptedChallenges().filter(isActiveChallenge);
-
-      if (cachedAcceptedChallenges.length > 0) {
-        setAcceptedChallenges(cachedAcceptedChallenges);
-        setStatus("ready");
-      }
-
-      if (!navigator.onLine) {
-        setAvailableChallenges([]);
-        setStatus(cachedAcceptedChallenges.length > 0 ? "ready" : "offline");
-        return;
-      }
-
-      setIsRefreshing(cachedAcceptedChallenges.length > 0);
-
-      try {
-        const supabase = getBrowserSupabaseClient();
-        const {
-          data: { session }
-        } = await supabase.auth.getSession();
-        const response = await fetch("/api/challenges", {
-          cache: "no-store",
-          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined
-        });
-        const payload = (await response.json()) as ChallengesResponse;
-
-        if (!response.ok || payload.error) {
-          throw new Error(payload.error ?? "Failed to load challenges.");
-        }
-
-        if (mounted) {
-          const nextChallenges = payload.challenges ?? [];
-          const serverCompletedChallenges = nextChallenges.filter(isCompletedChallenge);
-          const serverAcceptedChallenges = nextChallenges.filter(isActiveChallenge);
-          const mergedAcceptedChallenges = mergeChallengeLists(cachedAcceptedChallenges, serverAcceptedChallenges);
-          const acceptedIds = new Set(mergedAcceptedChallenges.map((challenge) => challenge.id));
-          const completedIds = new Set(serverCompletedChallenges.map((challenge) => challenge.id));
-          const syncedAcceptedChallenges = mergedAcceptedChallenges.map((cachedChallenge) => {
-            const freshChallenge = nextChallenges.find((challenge) => challenge.id === cachedChallenge.id);
-            return freshChallenge ? { ...cachedChallenge, ...freshChallenge } : cachedChallenge;
-          }).filter(isActiveChallenge);
-
-          setAcceptedChallenges(syncedAcceptedChallenges);
-          setCompletedChallenges(serverCompletedChallenges);
-          writeCachedAcceptedChallenges(syncedAcceptedChallenges);
-          setAvailableChallenges(nextChallenges.filter((challenge) => !acceptedIds.has(challenge.id) && !completedIds.has(challenge.id)));
-          setStatus("ready");
-        }
-      } catch {
-        if (mounted) {
-          setAvailableChallenges([]);
-          setStatus(cachedAcceptedChallenges.length > 0 ? "ready" : "offline");
-        }
-      } finally {
-        if (mounted) setIsRefreshing(false);
-      }
-    }
-
-    loadChallenges();
+    loadChallenges({ isMounted: () => mounted });
     return () => {
       mounted = false;
     };
-  }, [refreshNonce, user]);
+  }, [loadChallenges, refreshNonce, user?.id]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const refreshVisibleChallenges = () => {
+      if (document.visibilityState === "visible") {
+        loadChallenges({ primeFromCache: false, isMounted: () => mounted });
+      }
+    };
+
+    window.addEventListener("focus", refreshVisibleChallenges);
+    document.addEventListener("visibilitychange", refreshVisibleChallenges);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener("focus", refreshVisibleChallenges);
+      document.removeEventListener("visibilitychange", refreshVisibleChallenges);
+    };
+  }, [loadChallenges]);
 
   function acceptChallenge(challenge: Challenge) {
     const acceptedChallenge: Challenge = { ...challenge, user_challenge_status: "accepted" };
@@ -219,7 +238,10 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       <ChallengeSection challenges={acceptedChallenges} emptyMessage={t("challenges.emptyArchive")} locale={locale} title={t("challenges.accepted")} userLevel={userLevel} t={t} onOpen={(challenge) => setSelectedChallenge(challenge)} />
 
       <section className="challenge-section">
-        <button className="challenge-archive-link" type="button" onClick={() => setCompletedOpen(true)}>
+        <button className="challenge-archive-link" type="button" onClick={() => {
+          loadChallenges({ primeFromCache: false });
+          setCompletedOpen(true);
+        }}>
           <span>{t("challenges.completedPlural")}</span>
           <strong>{completedChallenges.length}</strong>
         </button>
