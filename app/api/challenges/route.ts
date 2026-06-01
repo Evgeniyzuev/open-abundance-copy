@@ -34,25 +34,16 @@ export async function GET(request: NextRequest) {
 
   if (accessToken) {
     const {
-      data: { user },
-      error: userError
+      data: { user }
     } = await supabase.auth.getUser(accessToken);
 
-    if (userError) {
-      return NextResponse.json({ error: "Session expired. Sign in again." }, { status: 401 });
-    }
-
     if (user) {
-      const { data: userChallenges, error: userChallengesError } = await supabase
+      const { data: userChallenges } = await supabase
         .from("user_challenges")
         .select("challenge_id,status")
         .eq("user_id", user.id);
 
-      if (userChallengesError) {
-        return NextResponse.json({ error: userChallengesError.message }, { status: 500 });
-      }
-
-      userChallengeMap = new Map((userChallenges ?? []).map((item) => [item.challenge_id, { status: normalizeChallengeStatus(item.status) }]));
+      userChallengeMap = new Map((userChallenges ?? []).map((item) => [item.challenge_id, item]));
     }
   }
 
@@ -74,8 +65,4 @@ export async function GET(request: NextRequest) {
       }
     }
   );
-}
-
-function normalizeChallengeStatus(status: string): string {
-  return status.trim().toLowerCase();
 }

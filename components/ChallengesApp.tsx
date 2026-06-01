@@ -46,7 +46,6 @@ type CheckChallengeResponse = {
 
 const DEFAULT_USER_LEVEL = 1;
 const LEGACY_ACCEPTED_CHALLENGES_CACHE_KEY = "open-abundance:accepted-challenges:v1";
-const SHOW_COMPLETED_CHALLENGES = false;
 
 type ChallengesAppProps = {
   refreshNonce: number;
@@ -80,15 +79,8 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     try {
       const supabase = getBrowserSupabaseClient();
       const {
-        data: { session },
-        error: sessionError
+        data: { session }
       } = await supabase.auth.getSession();
-
-      if (sessionError) throw sessionError;
-      if (user && !session?.access_token) {
-        throw new Error("Supabase session is missing.");
-      }
-
       const headers = new Headers({
         "Cache-Control": "no-cache"
       });
@@ -109,8 +101,8 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
 
       if (!isMounted()) return;
 
-      const nextChallenges = (payload.challenges ?? []).map(normalizeCompletedChallengeForTest);
-      const serverCompletedChallenges = SHOW_COMPLETED_CHALLENGES ? nextChallenges.filter(isCompletedChallenge) : [];
+      const nextChallenges = payload.challenges ?? [];
+      const serverCompletedChallenges = nextChallenges.filter(isCompletedChallenge);
       const serverAcceptedChallenges = nextChallenges.filter(isActiveChallenge);
       const acceptedIds = new Set(serverAcceptedChallenges.map((challenge) => challenge.id));
       const completedIds = new Set(serverCompletedChallenges.map((challenge) => challenge.id));
@@ -129,7 +121,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     } finally {
       if (isMounted()) setIsRefreshing(false);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     window.localStorage.removeItem(LEGACY_ACCEPTED_CHALLENGES_CACHE_KEY);
@@ -201,7 +193,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
     void loadChallenges();
   }
 
-  if (SHOW_COMPLETED_CHALLENGES && completedOpen) {
+  if (completedOpen) {
     return (
       <>
         <ChallengeArchiveScreen
@@ -252,16 +244,14 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
 
       <ChallengeSection challenges={acceptedChallenges} emptyMessage={t("challenges.emptyArchive")} locale={locale} title={t("challenges.accepted")} userLevel={userLevel} t={t} onOpen={(challenge) => setSelectedChallenge(challenge)} />
 
-      {SHOW_COMPLETED_CHALLENGES ? (
-        <section className="challenge-section">
-          <button className="challenge-archive-link" type="button" onClick={() => {
-            loadChallenges().then(() => setCompletedOpen(true));
-          }}>
-            <span>{t("challenges.completedPlural")}</span>
-            <strong>{completedChallenges.length}</strong>
-          </button>
-        </section>
-      ) : null}
+      <section className="challenge-section">
+        <button className="challenge-archive-link" type="button" onClick={() => {
+          loadChallenges().then(() => setCompletedOpen(true));
+        }}>
+          <span>{t("challenges.completedPlural")}</span>
+          <strong>{completedChallenges.length}</strong>
+        </button>
+      </section>
 
       {selectedChallenge ? (
         <ChallengeDetailModal
@@ -619,11 +609,6 @@ function isActiveChallenge(challenge: Challenge): boolean {
 
 function isCompletedChallenge(challenge: Challenge): boolean {
   return challenge.user_challenge_status === "completed";
-}
-
-function normalizeCompletedChallengeForTest(challenge: Challenge): Challenge {
-  if (SHOW_COMPLETED_CHALLENGES || !isCompletedChallenge(challenge)) return challenge;
-  return { ...challenge, user_challenge_status: null };
 }
 
 async function getAccessToken(): Promise<string> {

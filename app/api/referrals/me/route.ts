@@ -28,16 +28,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.nextUrl.origin);
     url.searchParams.set("ref", code);
 
-    return NextResponse.json(
-      { code, url: url.toString() },
-      {
-        headers: {
-          "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
-          "CDN-Cache-Control": "no-store",
-          "Pragma": "no-cache"
-        }
-      }
-    );
+    return NextResponse.json({ code, url: url.toString() }, { headers: { "Cache-Control": "no-store" } });
   } catch (routeError) {
     return NextResponse.json(
       { error: routeError instanceof Error ? routeError.message : "Failed to load referral link." },

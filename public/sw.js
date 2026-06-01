@@ -1,4 +1,4 @@
-const CACHE_NAME = "open-abundance-v5";
+const CACHE_NAME = "open-abundance-v4";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -22,21 +22,29 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(fetchAndCache(request));
-});
+  if (request.mode === "navigate") {
+    event.respondWith(
+      caches.match("/").then((cached) => {
+        const fetchPromise = fetch(request).then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
+          }
+          return response;
+        }).catch(() => cached);
 
-async function fetchAndCache(request) {
-  const cached = await caches.match(request.mode === "navigate" ? "/" : request);
-
-  try {
-    const response = await fetch(request);
-    if (response.ok && new URL(request.url).origin === self.location.origin) {
-      const copy = response.clone();
-      const cacheKey = request.mode === "navigate" ? "/" : request;
-      caches.open(CACHE_NAME).then((cache) => cache.put(cacheKey, copy));
-    }
-    return response;
-  } catch {
-    return cached ?? Response.error();
+        return fetchPromise;
+      })
+    );
+    return;
   }
-}
+
+  event.respondWith(caches.match(request).then((cached) => {
+    if (cached) return cached;
+    return fetch(request).then((response) => {
+      const copy = response.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+      return response;
+    });
+  }));
+});

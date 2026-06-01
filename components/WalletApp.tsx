@@ -73,15 +73,6 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
   }, [activeTab]);
 
   useEffect(() => {
-    setHistoryRows(null);
-    setHistoryError(null);
-    setWalletHistoryRows(null);
-    setWalletHistoryError(null);
-    setHistoryOpen(false);
-    setWalletHistoryOpen(false);
-  }, [activeTab, refreshNonce]);
-
-  useEffect(() => {
     if (!user) {
       setHistoryRows(null);
       setHistoryOpen(false);
@@ -104,11 +95,10 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
   async function toggleCoreHistory() {
     const nextOpen = !historyOpen;
     setHistoryOpen(nextOpen);
-    if (!nextOpen || historyLoading) return;
+    if (!nextOpen || historyRows || historyLoading) return;
 
     setHistoryLoading(true);
     setHistoryError(null);
-    setHistoryRows(null);
     try {
       setHistoryRows(await loadCoreAccrualHistory());
     } catch (loadError) {
@@ -122,11 +112,10 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
   async function toggleWalletHistory() {
     const nextOpen = !walletHistoryOpen;
     setWalletHistoryOpen(nextOpen);
-    if (!nextOpen || walletHistoryLoading) return;
+    if (!nextOpen || walletHistoryRows || walletHistoryLoading) return;
 
     setWalletHistoryLoading(true);
     setWalletHistoryError(null);
-    setWalletHistoryRows(null);
     try {
       setWalletHistoryRows(await loadWalletHistory());
     } catch (loadError) {
@@ -720,12 +709,9 @@ function TargetResult({ calculation, locale }: { calculation: ReturnType<typeof 
 
 async function loadCoreAccrualHistory(): Promise<CoreAccrualRow[]> {
   const token = await getAccessToken();
-  const response = await fetch(`/api/core/accrual-history?limit=30&ts=${Date.now()}`, {
+  const response = await fetch("/api/core/accrual-history?limit=30", {
     cache: "no-store",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Cache-Control": "no-cache"
-    }
+    headers: { Authorization: `Bearer ${token}` }
   });
   const payload = (await response.json()) as { rows?: CoreAccrualRow[]; error?: string };
   if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load core history.");
@@ -734,12 +720,9 @@ async function loadCoreAccrualHistory(): Promise<CoreAccrualRow[]> {
 
 async function loadWalletHistory(): Promise<WalletHistoryRow[]> {
   const token = await getAccessToken();
-  const response = await fetch(`/api/wallet/history?limit=30&ts=${Date.now()}`, {
+  const response = await fetch("/api/wallet/history?limit=30", {
     cache: "no-store",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Cache-Control": "no-cache"
-    }
+    headers: { Authorization: `Bearer ${token}` }
   });
   const payload = (await response.json()) as { rows?: WalletHistoryRow[]; error?: string };
   if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load wallet history.");
