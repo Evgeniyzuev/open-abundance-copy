@@ -31,6 +31,9 @@ type WalletHistoryRow = {
   reinvest_percent: number;
   created_at: string;
 };
+type ChallengeProgressResponse = {
+  error?: string;
+};
 type CalculatorMode = "future" | "target";
 type TargetKind = "core" | "daily";
 type TermUnit = "days" | "months" | "years";
@@ -217,7 +220,7 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
 
     try {
       const token = await getAccessToken();
-      await fetch("/api/challenges/progress", {
+      const response = await fetch("/api/challenges/progress", {
         method: "POST",
         cache: "no-store",
         headers: {
@@ -226,6 +229,10 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
         },
         body: JSON.stringify({ verificationLogic: "calculate_time_to_goal" })
       });
+      const payload = (await response.json().catch(() => ({}))) as ChallengeProgressResponse;
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error ?? "Failed to record calculator challenge progress.");
+      }
     } catch (challengeError) {
       console.warn("Calculator challenge progress failed", challengeError);
     }

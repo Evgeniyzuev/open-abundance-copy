@@ -41,6 +41,7 @@ The app should expose a future storage/debug screen that uses:
 ```ts
 const estimate = await navigator.storage.estimate();
 ```
+sw.js "const NAVIGATION_NETWORK_TIMEOUT_MS = 700;" - for instant loading offline
 
 Useful values:
 

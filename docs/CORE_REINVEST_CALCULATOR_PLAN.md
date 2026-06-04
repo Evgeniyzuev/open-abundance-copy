@@ -199,6 +199,11 @@ Time to target:
 
 ## Challenge Integration
 
+Current status, 2026-06-04:
+
+- `/api/challenges/check` now accepts calculator proof recorded on the current challenge row or on another active challenge with the same `verification_logic`.
+- The calculator challenge still completes only through `/api/challenges/check`, so reward payout stays behind the explicit challenge check flow.
+
 Калькулятор не должен менять Core, Wallet или любые ledger/balance значения. Расчет срока может записать только proof для челленджа `calculate_time_to_goal`.
 
 Правильный flow:

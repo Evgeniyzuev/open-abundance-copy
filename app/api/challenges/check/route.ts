@@ -150,19 +150,12 @@ async function verifyChallenge(
   }
 
   if (challenge.verification_logic === "calculate_time_to_goal") {
-    const { data: progress, error: progressError } = await supabase
-      .from("user_challenges")
-      .select("verification_data")
-      .eq("user_id", userId)
-      .eq("challenge_id", challenge.id)
-      .maybeSingle();
-
-    if (progressError) {
+    const progress = await getChallengeProgressProof(supabase, userId, challenge);
+    if (progress.error) {
       return { ok: false, reason: "Could not check calculator progress. Try again." };
     }
 
-    const verificationData = progress?.verification_data;
-    if (isRecord(verificationData) && verificationData.calculated === true) {
+    if (progress.calculated) {
       return { ok: true };
     }
 
@@ -170,6 +163,66 @@ async function verifyChallenge(
   }
 
   return { ok: false, reason: "Verification is not connected for this challenge yet." };
+}
+
+async function getChallengeProgressProof(
+  supabase: ReturnType<typeof createClient<Database>>,
+  userId: string,
+  challenge: ChallengeRow
+): Promise<{ calculated: boolean; error?: string }> {
+  const directProgress = await supabase
+    .from("user_challenges")
+    .select("verification_data")
+    .eq("user_id", userId)
+    .eq("challenge_id", challenge.id)
+    .limit(1);
+
+  if (directProgress.error) {
+    return { calculated: false, error: directProgress.error.message };
+  }
+
+  if (hasCalculatedProof(directProgress.data?.[0]?.verification_data)) {
+    return { calculated: true };
+  }
+
+  if (!challenge.verification_logic) {
+    return { calculated: false };
+  }
+
+  const relatedChallenges = await supabase
+    .from("challenges")
+    .select("id")
+    .eq("is_active", true)
+    .eq("verification_logic", challenge.verification_logic);
+
+  if (relatedChallenges.error) {
+    return { calculated: false, error: relatedChallenges.error.message };
+  }
+
+  const relatedChallengeIds = Array.from(new Set((relatedChallenges.data ?? []).map((row) => row.id)));
+  if (relatedChallengeIds.length === 0) {
+    return { calculated: false };
+  }
+
+  const relatedProgress = await supabase
+    .from("user_challenges")
+    .select("verification_data")
+    .eq("user_id", userId)
+    .in("challenge_id", relatedChallengeIds)
+    .order("updated_at", { ascending: false })
+    .limit(10);
+
+  if (relatedProgress.error) {
+    return { calculated: false, error: relatedProgress.error.message };
+  }
+
+  return {
+    calculated: (relatedProgress.data ?? []).some((row) => hasCalculatedProof(row.verification_data))
+  };
+}
+
+function hasCalculatedProof(value: unknown): boolean {
+  return isRecord(value) && value.calculated === true;
 }
 
 function getRewardAmount(value: Json): number {
