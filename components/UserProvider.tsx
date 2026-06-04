@@ -49,6 +49,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [pendingLevelUps, setPendingLevelUps] = useState<number[]>([]);
   const [guestLocale, setGuestLocale] = useState<AppLocale>("en");
   const refreshRequestIdRef = useRef(0);
+  const serverDataVersionRef = useRef(0);
+  const currentUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setGuestLocale(detectBrowserLocale());
@@ -77,7 +79,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = locale;
   }, [locale]);
 
+  useEffect(() => {
+    currentUserIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+
   const clearServerData = useCallback(() => {
+    serverDataVersionRef.current += 1;
     setUser(null);
     setProfile(null);
     setCore(null);
@@ -86,6 +93,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const refreshUserData = useCallback(async () => {
     const requestId = refreshRequestIdRef.current + 1;
+    const serverDataVersionAtStart = serverDataVersionRef.current;
     refreshRequestIdRef.current = requestId;
     setRefreshing(true);
     setError(null);
@@ -130,6 +138,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }
 
       if (!isLatestRefresh(requestId, refreshRequestIdRef)) return;
+      if (serverDataVersionAtStart !== serverDataVersionRef.current) return;
+      if (payload.user?.id && currentUserIdRef.current && payload.user.id !== currentUserIdRef.current) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("Ignoring user context for a different user.", {
+            currentUserId: currentUserIdRef.current,
+            payloadUserId: payload.user.id
+          });
+        }
+        return;
+      }
+
       setUser(payload.user);
       setProfile(payload.profile);
       setCore(payload.core);
@@ -147,6 +166,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [clearServerData]);
 
   const applyServerData = useCallback((data: Partial<UserContextResponse>) => {
+    serverDataVersionRef.current += 1;
     if ("user" in data) setUser(data.user ?? null);
     if ("profile" in data) setProfile(data.profile ?? null);
     if ("core" in data) setCore(data.core ?? null);

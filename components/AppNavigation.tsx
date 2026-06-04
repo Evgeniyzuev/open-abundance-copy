@@ -80,6 +80,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const [pullDistance, setPullDistance] = useState(0);
   const refreshInFlightRef = useRef(false);
   const refreshQueuedRef = useRef(false);
+  const refreshQueueResolversRef = useRef<Array<() => void>>([]);
   const pullDistanceRef = useRef(0);
   const touchStartYRef = useRef(0);
   const lastGestureTouchYRef = useRef(0);
@@ -97,7 +98,9 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const requestServerRefresh = useCallback(async (reason: string) => {
     if (refreshInFlightRef.current) {
       refreshQueuedRef.current = true;
-      return;
+      return new Promise<void>((resolve) => {
+        refreshQueueResolversRef.current.push(resolve);
+      });
     }
 
     refreshInFlightRef.current = true;
@@ -112,6 +115,9 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
       console.warn(`Server refresh failed after ${reason}`, refreshError);
     } finally {
       refreshInFlightRef.current = false;
+      const resolvers = refreshQueueResolversRef.current;
+      refreshQueueResolversRef.current = [];
+      resolvers.forEach((resolve) => resolve());
     }
   }, [refreshUserData]);
 

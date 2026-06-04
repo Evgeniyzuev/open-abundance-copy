@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Clock3, ShieldCheck, Trophy } from "lucide-react";
 import { getOrCreateLocalGuest } from "@/lib/guestIdentity";
 import { getBrowserSupabaseClient, signInWithGoogle } from "@/lib/supabaseClient";
-import { useUserContext } from "@/components/UserProvider";
+import { type CoreAccount, useUserContext, type WalletAccount } from "@/components/UserProvider";
 import type { AppLocale, MessageKey } from "@/lib/i18n";
 
 type LocaleText = Record<string, string> | null;
@@ -30,13 +30,19 @@ type Challenge = {
 };
 
 type ChallengesResponse = {
+  authenticated?: boolean;
+  viewerUserId?: string | null;
   challenges?: Challenge[];
   error?: string;
 };
 
 type CheckChallengeResponse = {
+  userId?: string;
+  challengeId?: string;
   status?: ChallengeStatus;
   completed?: boolean;
+  core?: CoreAccount | null;
+  wallet?: WalletAccount | null;
   message?: string;
   rewardAmount?: number;
   rewardAccount?: string;
@@ -60,11 +66,16 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
   const [completedOpen, setCompletedOpen] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const { user, profile, core, locale, t } = useUserContext();
+  const { user, profile, core, locale, applyServerData, t } = useUserContext();
+  const loadRequestIdRef = useRef(0);
+  const challengeMutationVersionRef = useRef(0);
   const userLevel = core?.level ?? profile?.level ?? DEFAULT_USER_LEVEL;
   const hasChallenges = availableChallenges.length > 0 || acceptedChallenges.length > 0 || completedChallenges.length > 0;
 
   const loadChallenges = useCallback(async ({ isMounted = () => true }: { isMounted?: () => boolean } = {}) => {
+    const requestId = loadRequestIdRef.current + 1;
+    const mutationVersionAtStart = challengeMutationVersionRef.current;
+    loadRequestIdRef.current = requestId;
     setStatus((current) => current === "ready" ? current : "loading");
 
     if (!navigator.onLine) {
@@ -79,6 +90,12 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
       const {
         data: { session }
       } = await supabase.auth.getSession();
+      if (user && !session?.access_token) {
+        throw new Error("Missing Supabase session for authenticated challenges.");
+      }
+
+      const params = new URLSearchParams({ ts: String(Date.now()) });
+      if (user) params.set("auth", "required");
       const headers = new Headers({
         "Cache-Control": "no-cache"
       });
@@ -87,7 +104,7 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
         headers.set("Authorization", `Bearer ${session.access_token}`);
       }
 
-      const response = await fetch(`/api/challenges?ts=${Date.now()}`, {
+      const response = await fetch(`/api/challenges?${params.toString()}`, {
         cache: "no-store",
         headers
       });
@@ -97,7 +114,13 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
         throw new Error(payload.error ?? "Failed to load challenges.");
       }
 
+      if (user && (!payload.authenticated || payload.viewerUserId !== user.id)) {
+        throw new Error("Challenge data belongs to a different or guest session.");
+      }
+
       if (!isMounted()) return;
+      if (requestId !== loadRequestIdRef.current) return;
+      if (mutationVersionAtStart !== challengeMutationVersionRef.current) return;
 
       const nextChallenges = payload.challenges ?? [];
       const serverCompletedChallenges = nextChallenges.filter(isCompletedChallenge);
@@ -110,13 +133,13 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
       setAvailableChallenges(nextChallenges.filter((challenge) => !acceptedIds.has(challenge.id) && !completedIds.has(challenge.id)));
       setStatus("ready");
     } catch {
-      if (isMounted()) {
+      if (isMounted() && requestId === loadRequestIdRef.current && mutationVersionAtStart === challengeMutationVersionRef.current) {
         setStatus((current) => current === "ready" ? current : "offline");
       }
     } finally {
-      if (isMounted()) setIsRefreshing(false);
+      if (isMounted() && requestId === loadRequestIdRef.current) setIsRefreshing(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (!selectedChallenge && !completionReward) return;
@@ -168,13 +191,17 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
       },
       body: JSON.stringify({ challengeId: challenge.id })
     });
-    const payload = (await response.json()) as { status?: ChallengeStatus; error?: string };
+    const payload = (await response.json()) as { userId?: string; challengeId?: string; status?: ChallengeStatus; error?: string };
 
     if (!response.ok || payload.error) {
       throw new Error(payload.error ?? "Failed to accept challenge.");
     }
 
-    applyChallengeStatus(challenge.id, payload.status ?? "accepted");
+    if (payload.userId && user?.id && payload.userId !== user.id) {
+      throw new Error("Challenge acceptance returned a different user.");
+    }
+
+    applyChallengeStatus(payload.challengeId ?? challenge.id, payload.status ?? "accepted");
     setSelectedChallenge(null);
     await onRefresh();
     await loadChallenges();
@@ -188,6 +215,7 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
   }
 
   function applyChallengeStatus(challengeId: string, status: ChallengeStatus) {
+    challengeMutationVersionRef.current += 1;
     const updateChallenge = (challenge: Challenge): Challenge => challenge.id === challengeId ? { ...challenge, user_challenge_status: status } : challenge;
     const isTarget = (challenge: Challenge) => challenge.id === challengeId;
     const currentChallenge = [...availableChallenges, ...acceptedChallenges, ...completedChallenges].find(isTarget);
@@ -233,6 +261,7 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
             onAccept={() => acceptChallenge(selectedChallenge)}
             onClose={() => setSelectedChallenge(null)}
             onComplete={completeChallenge}
+            onApplyServerData={applyServerData}
             onRefreshUserData={onRefresh}
           />
         ) : null}
@@ -278,6 +307,7 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
           onAccept={() => acceptChallenge(selectedChallenge)}
           onClose={() => setSelectedChallenge(null)}
           onComplete={completeChallenge}
+          onApplyServerData={applyServerData}
           onRefreshUserData={onRefresh}
         />
       ) : null}
@@ -388,6 +418,7 @@ function ChallengeDetailModal({
   onAccept,
   onClose,
   onComplete,
+  onApplyServerData,
   onRefreshUserData
 }: {
   challenge: Challenge;
@@ -398,6 +429,7 @@ function ChallengeDetailModal({
   onAccept: () => Promise<void>;
   onClose: () => void;
   onComplete: (challenge: Challenge, reward: { amount: number; account: string; claimed: boolean }) => void;
+  onApplyServerData: (data: { core?: CoreAccount | null; wallet?: WalletAccount | null }) => void;
   onRefreshUserData: () => Promise<void>;
 }) {
   const signupChallenge = challenge.verification_logic === "signup";
@@ -462,6 +494,7 @@ function ChallengeDetailModal({
         account: payload.rewardAccount ?? "core",
         claimed: Boolean(payload.rewardClaimed)
       };
+      onApplyServerData({ core: payload.core, wallet: payload.wallet });
       onComplete(challenge, reward);
       await onRefreshUserData();
       setCheckStatus("idle");

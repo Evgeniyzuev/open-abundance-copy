@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (existing?.status === "completed") {
-    return NextResponse.json({ status: "completed" });
+    return NextResponse.json({ userId: user.id, challengeId: challenge.id, status: "completed" });
   }
 
   const { error: upsertError } = await supabase.from("user_challenges").upsert(
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: upsertError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ status: "accepted" });
+  return NextResponse.json({ userId: user.id, challengeId: challenge.id, status: "accepted" });
 }
 
 function isUuid(value: string): boolean {

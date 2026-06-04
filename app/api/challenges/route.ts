@@ -9,9 +9,14 @@ export async function GET(request: NextRequest) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const accessToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const authRequired = request.nextUrl.searchParams.get("auth") === "required";
 
   if (!supabaseUrl || !supabaseKey) {
     return NextResponse.json({ error: "Supabase environment variables are missing." }, { status: 500, headers: NO_STORE_HEADERS });
+  }
+
+  if (authRequired && !accessToken) {
+    return NextResponse.json({ error: "Missing Supabase access token.", authenticated: false }, { status: 401, headers: NO_STORE_HEADERS });
   }
 
   const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
@@ -32,6 +37,7 @@ export async function GET(request: NextRequest) {
   }
 
   let userChallengeMap = new Map<string, { status: string }>();
+  let viewerUserId: string | null = null;
 
   if (accessToken) {
     const {
@@ -44,6 +50,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (user) {
+      viewerUserId = user.id;
       const { data: userChallenges, error: userChallengesError } = await supabase
         .from("user_challenges")
         .select("challenge_id,status")
@@ -71,7 +78,11 @@ export async function GET(request: NextRequest) {
   });
 
   return NextResponse.json(
-    { challenges: data },
+    {
+      authenticated: Boolean(viewerUserId),
+      viewerUserId,
+      challenges: data
+    },
     {
       headers: NO_STORE_HEADERS
     }

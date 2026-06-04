@@ -71,6 +71,8 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json({
+      userId: user.id,
+      challengeId: challenge.id,
       status: "accepted",
       completed: false,
       message: verification.reason
@@ -90,9 +92,26 @@ export async function POST(request: NextRequest) {
   }
 
   const result = completion?.[0];
+  const [coreResult, walletResult] = await Promise.all([
+    supabase.from("core_accounts").select("*").eq("user_id", user.id).maybeSingle(),
+    supabase.from("wallet_accounts").select("*").eq("user_id", user.id).maybeSingle()
+  ]);
+
+  if (coreResult.error) {
+    return NextResponse.json({ error: coreResult.error.message }, { status: 500 });
+  }
+
+  if (walletResult.error) {
+    return NextResponse.json({ error: walletResult.error.message }, { status: 500 });
+  }
+
   return NextResponse.json({
+    userId: user.id,
+    challengeId: challenge.id,
     status: result?.challenge_status ?? "completed",
     completed: true,
+    core: coreResult.data,
+    wallet: walletResult.data,
     rewardClaimed: Boolean(result?.reward_claimed),
     rewardAccount: result?.rewarded_account ?? "core",
     rewardAmount: Number(result?.rewarded_amount ?? rewardAmount)
