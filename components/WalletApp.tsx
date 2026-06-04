@@ -281,6 +281,7 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
             amount={wallet?.balance ?? 0}
             locale={locale}
             meta={wallet ? t("app.common.updated", { date: formatDate(wallet.updated_at, locale) }) : t("app.common.created")}
+            adaptiveAmount
           />
           <HistoryPanel
             title={locale === "ru" ? "История Wallet" : "Wallet history"}
@@ -300,7 +301,7 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
                     <span>{locale === "ru" ? "Daily Core payout" : "Daily Core payout"}</span>
                   </div>
                   <div>
-                    <strong>+{formatMoney(row.amount, locale)}</strong>
+                    <strong>+{formatAdaptiveMoney(row.amount, locale)}</strong>
                     <span>Wallet</span>
                   </div>
                   <p>{`${locale === "ru" ? "Daily rate" : "Daily rate"} ${formatPercent(row.daily_rate * 100, locale)} · ${locale === "ru" ? "Реинвест" : "Reinvest"} ${formatPercentCompact(row.reinvest_percent, locale)}`}</p>

@@ -14,7 +14,7 @@
 - Daily accrual job уже использует `reinvest_percent`:
   - `gross_amount = core_balance * 0.0006330000`;
   - `core_amount = gross_amount * reinvest_percent / 100`;
-  - `wallet_amount = round(gross_amount - core_amount, 2)`;
+  - `wallet_amount = gross_amount - core_amount`;
   - `core_accounts.balance` растет на `core_amount`;
   - `wallet_accounts.balance` растет на `wallet_amount`.
 - В `components/WalletApp.tsx` сейчас Core только показывает `reinvest_percent` в meta-строке, но не дает его настроить.
