@@ -5,31 +5,44 @@ export type TaskSchedule =
   | { type: "daily"; startDate: string; targetDays?: number; infinite: boolean }
   | { type: "weekdays"; startDate: string; weekdays: number[]; targetDays?: number; infinite: boolean };
 
+export type TaskStreakSettings = {
+  hardcore: boolean;
+  initialLives: number;
+  livesEveryDays: number;
+};
+
 export type TaskItem = {
   id: string;
   title: string;
   description: string;
   subtasks: string[];
   schedule: TaskSchedule;
+  streak?: TaskStreakSettings;
   imageUrl?: string;
   thumbnailDataUrl?: string;
   completed: boolean;
+  failed?: boolean;
+  failedAt?: string;
   createdAt: string;
   updatedAt: string;
   deleted?: boolean;
   syncStatus: SyncStatus;
 };
 
+export type TaskCompletionType = "done" | "life";
+
 export type TaskCompletion = {
   id: string;
   taskId: string;
   localDate: string;
+  type: TaskCompletionType;
   completedAt: string;
   syncStatus: SyncStatus;
 };
 
 export type TaskInput = Pick<TaskItem, "id" | "title" | "description" | "schedule" | "syncStatus"> & {
   subtasks?: string[];
+  streak?: TaskStreakSettings;
   imageUrl?: string;
   thumbnailDataUrl?: string;
 };
@@ -101,7 +114,7 @@ export async function getAllTasks(): Promise<TaskItem[]> {
 
 export async function getTaskCompletions(): Promise<TaskCompletion[]> {
   const completions = await withStore<TaskCompletion[]>(TASK_COMPLETIONS_STORE, "readonly", (store) => store.getAll());
-  return completions.map((completion) => ({ ...completion, syncStatus: "local" }));
+  return completions.map(normalizeCompletion);
 }
 
 export async function saveTask(input: TaskInput): Promise<TaskItem> {
@@ -113,9 +126,12 @@ export async function saveTask(input: TaskInput): Promise<TaskItem> {
     description: input.description,
     subtasks: input.subtasks ?? existing?.subtasks ?? [],
     schedule: input.schedule,
+    streak: input.streak ?? existing?.streak,
     imageUrl: input.imageUrl,
     thumbnailDataUrl: input.thumbnailDataUrl,
     completed: existing?.completed ?? false,
+    failed: existing?.failed,
+    failedAt: existing?.failedAt,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
     syncStatus: input.syncStatus
@@ -125,7 +141,7 @@ export async function saveTask(input: TaskInput): Promise<TaskItem> {
   return task;
 }
 
-export async function completeTaskDay(taskId: string, localDate: string): Promise<void> {
+export async function completeTaskDay(taskId: string, localDate: string, type: TaskCompletionType = "done"): Promise<void> {
   const existing = await getTaskCompletion(taskId, localDate);
   if (existing) return;
 
@@ -133,13 +149,14 @@ export async function completeTaskDay(taskId: string, localDate: string): Promis
     id: `${taskId}:${localDate}`,
     taskId,
     localDate,
+    type,
     completedAt: new Date().toISOString(),
     syncStatus: "local"
   };
 
   await withStore<IDBValidKey>(TASK_COMPLETIONS_STORE, "readwrite", (store) => store.put(completion));
   const task = await getTask(taskId);
-  if (task && task.schedule.type === "once") {
+  if (task && task.schedule.type === "once" && type === "done") {
     await withStore<IDBValidKey>(TASKS_STORE, "readwrite", (store) =>
       store.put({ ...task, completed: true, updatedAt: new Date().toISOString(), syncStatus: "local" })
     );
@@ -151,6 +168,15 @@ export async function completeTask(id: string): Promise<void> {
   if (!task) return;
   await withStore<IDBValidKey>(TASKS_STORE, "readwrite", (store) =>
     store.put({ ...task, completed: true, updatedAt: new Date().toISOString(), syncStatus: "local" })
+  );
+}
+
+export async function failTask(id: string): Promise<void> {
+  const task = await getTask(id);
+  if (!task) return;
+  const now = new Date().toISOString();
+  await withStore<IDBValidKey>(TASKS_STORE, "readwrite", (store) =>
+    store.put({ ...task, completed: true, failed: true, failedAt: now, updatedAt: now, syncStatus: "local" })
   );
 }
 
@@ -186,7 +212,26 @@ function normalizeTask(task: TaskItem): TaskItem {
     ...task,
     description: task.description ?? "",
     subtasks: Array.isArray(task.subtasks) ? task.subtasks : [],
+    streak: normalizeStreakSettings(task.streak),
     completed: Boolean(task.completed),
+    failed: Boolean(task.failed),
+    syncStatus: "local"
+  };
+}
+
+function normalizeStreakSettings(settings: TaskStreakSettings | undefined): TaskStreakSettings | undefined {
+  if (!settings) return undefined;
+  return {
+    hardcore: Boolean(settings.hardcore),
+    initialLives: Math.max(0, Math.floor(Number(settings.initialLives) || 0)),
+    livesEveryDays: Math.max(0, Math.floor(Number(settings.livesEveryDays) || 0))
+  };
+}
+
+function normalizeCompletion(completion: TaskCompletion): TaskCompletion {
+  return {
+    ...completion,
+    type: completion.type === "life" ? "life" : "done",
     syncStatus: "local"
   };
 }

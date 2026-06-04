@@ -1,17 +1,18 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { CheckSquare, ChevronLeft, ChevronRight, ImagePlus, Link, Plus, Trash2 } from "lucide-react";
+import { CheckSquare, ChevronLeft, ChevronRight, ImagePlus, Link, Plus, Repeat2, Trash2 } from "lucide-react";
 import {
   completeTask,
   completeTaskDay,
   deleteTask,
+  failTask,
   getAllTasks,
   getTaskCompletions,
   purgeTask,
   saveTask
 } from "@/lib/tasksStore";
-import type { TaskCompletion, TaskItem, TaskSchedule } from "@/lib/tasksStore";
+import type { TaskCompletion, TaskItem, TaskSchedule, TaskStreakSettings } from "@/lib/tasksStore";
 import { useUserContext } from "@/components/UserProvider";
 import type { AppLocale, MessageKey } from "@/lib/i18n";
 
@@ -48,6 +49,9 @@ const emptyTaskForm = {
   startDate: todayKey(),
   targetDays: "7",
   infinite: false,
+  hardcore: false,
+  initialLives: "0",
+  livesEveryDays: "0",
   weekdays: [1, 2, 3, 4, 5],
   imageMode: "url" as "url" | "upload",
   imageUrl: "",
@@ -90,6 +94,18 @@ export default function TasksApp() {
   );
   const archiveTasks = useMemo(() => tasks.filter((task) => task.completed || task.deleted), [tasks]);
 
+  function openNewTaskModal() {
+    setForm({ ...emptyTaskForm, startDate: todayKey() });
+    setModalOpen(true);
+  }
+
+  function repeatTask(task: TaskItem) {
+    setForm(buildFormFromTask(task, today));
+    setSelectedTaskId(null);
+    setArchiveOpen(false);
+    setModalOpen(true);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const title = form.title.trim();
@@ -101,6 +117,7 @@ export default function TasksApp() {
       description: form.description.trim(),
       subtasks: form.subtasks,
       schedule: buildSchedule(form),
+      streak: buildStreakSettings(form),
       imageUrl: form.imageMode === "url" ? form.imageUrl.trim() || undefined : undefined,
       thumbnailDataUrl: form.imageMode === "upload" ? form.thumbnailDataUrl || undefined : undefined,
       syncStatus: "local"
@@ -112,7 +129,34 @@ export default function TasksApp() {
   }
 
   async function markToday(task: TaskItem) {
-    const completedBefore = completions.filter((completion) => completion.taskId === task.id).length;
+    const taskCompletions = completions.filter((completion) => completion.taskId === task.id);
+    const missedDays = getMissedPlannedDays(task, today, taskCompletions);
+    let rescuedCount = 0;
+
+    if (task.schedule.type !== "once" && task.streak && missedDays.length > 0) {
+      if (task.streak.hardcore) {
+        await failTask(task.id);
+        setSelectedTaskId(null);
+        await refreshTasks();
+        window.alert(t("tasks.streakFailedAlert", { title: task.title }));
+        return;
+      }
+
+      const livesAvailable = getAvailableLives(task.streak, taskCompletions);
+      const rescuedDays = missedDays.slice(0, livesAvailable);
+      rescuedCount = rescuedDays.length;
+      await Promise.all(rescuedDays.map((day) => completeTaskDay(task.id, day, "life")));
+
+      if (livesAvailable < missedDays.length) {
+        await failTask(task.id);
+        setSelectedTaskId(null);
+        await refreshTasks();
+        window.alert(t("tasks.streakFailedAlert", { title: task.title }));
+        return;
+      }
+    }
+
+    const completedBefore = taskCompletions.length + rescuedCount;
     await completeTaskDay(task.id, today);
     await refreshTasks();
 
@@ -142,6 +186,7 @@ export default function TasksApp() {
       description: task.description,
       subtasks: task.subtasks,
       schedule,
+      streak: task.streak,
       imageUrl: task.imageUrl,
       thumbnailDataUrl: task.thumbnailDataUrl,
       syncStatus: "local"
@@ -175,6 +220,7 @@ export default function TasksApp() {
         today={today}
         onBack={() => setArchiveOpen(false)}
         onDeleteForever={removeTaskForever}
+        onRepeat={repeatTask}
       />
     );
   }
@@ -186,12 +232,12 @@ export default function TasksApp() {
           <span>Checks</span>
           <h1>{t("tasks.title")}</h1>
         </div>
-        <button className="tasks-add-button" type="button" aria-label={t("tasks.newTask")} onClick={() => setModalOpen(true)}>
+        <button className="tasks-add-button" type="button" aria-label={t("tasks.newTask")} onClick={openNewTaskModal}>
           <Plus size={24} />
         </button>
       </header>
 
-      <TaskSection title={t("tasks.today")} emptyText={t("tasks.todayEmpty")} tasks={todayTasks} completions={completions} today={today} onMarkToday={markToday} onOpen={setSelectedTaskId} />
+      <TaskSection title={t("tasks.today")} emptyText={t("tasks.todayEmpty")} tasks={todayTasks} completions={completions} today={today} onMarkToday={markToday} onOpen={setSelectedTaskId} onRepeat={repeatTask} />
 
       <section className="task-section">
         <button className="task-section-toggle" type="button" onClick={() => setOtherExpanded((value) => !value)}>
@@ -199,7 +245,7 @@ export default function TasksApp() {
           <strong>{otherTasks.length}</strong>
         </button>
         {otherExpanded ? (
-          <TaskList emptyText={t("tasks.otherEmpty")} tasks={otherTasks} completions={completions} today={today} onMarkToday={markToday} onOpen={setSelectedTaskId} />
+          <TaskList emptyText={t("tasks.otherEmpty")} tasks={otherTasks} completions={completions} today={today} onMarkToday={markToday} onOpen={setSelectedTaskId} onRepeat={repeatTask} />
         ) : null}
       </section>
 
@@ -241,6 +287,7 @@ type TaskSectionProps = {
   today: string;
   onMarkToday: (task: TaskItem) => void;
   onOpen: (id: string) => void;
+  onRepeat: (task: TaskItem) => void;
 };
 
 type TaskArchiveScreenProps = {
@@ -250,9 +297,10 @@ type TaskArchiveScreenProps = {
   today: string;
   onBack: () => void;
   onDeleteForever: (task: TaskItem) => void;
+  onRepeat: (task: TaskItem) => void;
 };
 
-function TaskArchiveScreen({ tasks, completions, locale, today, onBack, onDeleteForever }: TaskArchiveScreenProps) {
+function TaskArchiveScreen({ tasks, completions, locale, today, onBack, onDeleteForever, onRepeat }: TaskArchiveScreenProps) {
   const { t } = useUserContext();
 
   return (
@@ -274,6 +322,7 @@ function TaskArchiveScreen({ tasks, completions, locale, today, onBack, onDelete
               task={task}
               today={today}
               onDeleteForever={() => onDeleteForever(task)}
+              onRepeat={() => onRepeat(task)}
             />
           ))}
         </div>
@@ -291,13 +340,13 @@ function TaskSection(props: TaskSectionProps) {
   );
 }
 
-function TaskList({ emptyText, tasks, completions, today, onMarkToday, onOpen }: Omit<TaskSectionProps, "title">) {
+function TaskList({ emptyText, tasks, completions, today, onMarkToday, onOpen, onRepeat }: Omit<TaskSectionProps, "title">) {
   if (tasks.length === 0) return <div className="task-empty">{emptyText}</div>;
 
   return (
     <div className="task-panel-list">
       {tasks.map((task) => (
-        <TaskPanel key={task.id} task={task} completions={completions} today={today} onMarkToday={() => onMarkToday(task)} onOpen={() => onOpen(task.id)} />
+        <TaskPanel key={task.id} task={task} completions={completions} today={today} onMarkToday={() => onMarkToday(task)} onOpen={() => onOpen(task.id)} onRepeat={() => onRepeat(task)} />
       ))}
     </div>
   );
@@ -309,9 +358,10 @@ type TaskPanelProps = {
   today: string;
   onMarkToday: () => void;
   onOpen: () => void;
+  onRepeat: () => void;
 };
 
-function TaskPanel({ task, completions, today, onMarkToday, onOpen }: TaskPanelProps) {
+function TaskPanel({ task, completions, today, onMarkToday, onOpen, onRepeat }: TaskPanelProps) {
   const { t } = useUserContext();
   const progress = getProgress(task, completions, t);
   const doneToday = isCompletedOn(task.id, today, completions);
@@ -334,11 +384,16 @@ function TaskPanel({ task, completions, today, onMarkToday, onOpen }: TaskPanelP
           ) : null}
         </span>
       </button>
-      {isDueOn(task, today) ? (
-        <button className={doneToday ? "task-done-button done" : "task-done-button"} type="button" disabled={doneToday} onClick={onMarkToday}>
-          {doneToday ? "\u2713" : ""}
+      <div className="task-panel-actions">
+        <button className="task-repeat-button" type="button" aria-label={t("tasks.repeatTask")} onClick={onRepeat}>
+          <Repeat2 size={17} />
         </button>
-      ) : null}
+        {isDueOn(task, today) ? (
+          <button className={doneToday ? "task-done-button done" : "task-done-button"} type="button" disabled={doneToday} onClick={onMarkToday}>
+            {doneToday ? "\u2713" : ""}
+          </button>
+        ) : null}
+      </div>
     </article>
   );
 }
@@ -349,9 +404,10 @@ type ArchiveTaskPanelProps = {
   locale: AppLocale;
   today: string;
   onDeleteForever: () => void;
+  onRepeat: () => void;
 };
 
-function ArchiveTaskPanel({ task, completions, locale, today, onDeleteForever }: ArchiveTaskPanelProps) {
+function ArchiveTaskPanel({ task, completions, locale, today, onDeleteForever, onRepeat }: ArchiveTaskPanelProps) {
   const { t } = useUserContext();
   const progress = getProgress(task, completions, t);
   const image = task.thumbnailDataUrl || task.imageUrl;
@@ -363,7 +419,7 @@ function ArchiveTaskPanel({ task, completions, locale, today, onDeleteForever }:
         <span className="task-panel-body">
           <span className="task-panel-title">
             {task.title}
-            <em>{task.deleted ? t("tasks.deleted") : t("tasks.completed")}</em>
+            <em>{task.deleted ? t("tasks.deleted") : task.failed ? t("tasks.failed") : t("tasks.completed")}</em>
           </span>
           <small>{getArchiveSubtitle(task, today, progress.label, t)}</small>
           {progress.percent !== null ? (
@@ -373,9 +429,14 @@ function ArchiveTaskPanel({ task, completions, locale, today, onDeleteForever }:
           ) : null}
         </span>
       </div>
-      <button className="task-forever-delete-button" type="button" aria-label={t("tasks.deleteForever")} onClick={onDeleteForever}>
-        <Trash2 size={18} />
-      </button>
+      <div className="task-panel-actions">
+        <button className="task-repeat-button" type="button" aria-label={t("tasks.repeatTask")} onClick={onRepeat}>
+          <Repeat2 size={17} />
+        </button>
+        <button className="task-forever-delete-button" type="button" aria-label={t("tasks.deleteForever")} onClick={onDeleteForever}>
+          <Trash2 size={18} />
+        </button>
+      </div>
     </article>
   );
 }
@@ -473,20 +534,54 @@ function TaskModal({ form, setForm, onClose, onSubmit }: TaskModalProps) {
         ) : null}
 
         {form.scheduleType !== "once" ? (
-          <div className="duration-row">
-            <input
-              aria-label={t("tasks.daysCountLabel")}
-              disabled={form.infinite}
-              min={1}
-              type="number"
-              value={form.targetDays}
-              onChange={(event) => setForm((current) => ({ ...current, targetDays: event.target.value }))}
-            />
-            <label>
-              <input type="checkbox" checked={form.infinite} onChange={(event) => setForm((current) => ({ ...current, infinite: event.target.checked }))} />
-              {t("tasks.infiniteDays")}
-            </label>
-          </div>
+          <>
+            <div className="duration-row">
+              <input
+                aria-label={t("tasks.daysCountLabel")}
+                disabled={form.infinite}
+                min={1}
+                type="number"
+                value={form.targetDays}
+                onChange={(event) => setForm((current) => ({ ...current, targetDays: event.target.value }))}
+              />
+              <label>
+                <input type="checkbox" checked={form.infinite} onChange={(event) => setForm((current) => ({ ...current, infinite: event.target.checked }))} />
+                {t("tasks.infiniteDays")}
+              </label>
+            </div>
+            <div className="streak-options">
+              <label>
+                <input type="checkbox" checked={form.hardcore} onChange={(event) => setForm((current) => ({ ...current, hardcore: event.target.checked }))} />
+                {t("tasks.hardcore")}
+              </label>
+              {!form.hardcore ? (
+                <div className="life-settings-row">
+                  <label className="life-field">
+                    <span>{t("tasks.initialLivesLabel")}</span>
+                    <input
+                      aria-label={t("tasks.initialLivesLabel")}
+                      min={0}
+                      placeholder={t("tasks.initialLivesPlaceholder")}
+                      type="number"
+                      value={form.initialLives}
+                      onChange={(event) => setForm((current) => ({ ...current, initialLives: event.target.value }))}
+                    />
+                  </label>
+                  <label className="life-field">
+                    <span>{t("tasks.livesEveryDaysLabel")}</span>
+                    <input
+                      aria-label={t("tasks.livesEveryDaysLabel")}
+                      min={0}
+                      placeholder={t("tasks.livesEveryDaysPlaceholder")}
+                      type="number"
+                      value={form.livesEveryDays}
+                      onChange={(event) => setForm((current) => ({ ...current, livesEveryDays: event.target.value }))}
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          </>
         ) : null}
       </form>
     </div>
@@ -611,18 +706,43 @@ function TaskMonthCalendar({ task, completions, locale, today }: { task: TaskIte
         const inMonth = day.startsWith(visibleMonth);
         const due = isPlannedOn(task, day);
         const done = isCompletedOn(task.id, day, completions);
+        const life = isLifeCompletion(task.id, day, completions);
         const className = [
           "task-calendar-day",
           inMonth ? "" : "outside",
           due ? "due" : "",
-          done ? "done" : ""
+          done ? "done" : "",
+          life ? "life" : ""
         ].filter(Boolean).join(" ");
 
-        return <span className={className} key={day}>{parseDateKey(day).getDate()}</span>;
+        return <span className={className} key={day}>{life ? "\u2764\uFE0F" : parseDateKey(day).getDate()}</span>;
       })}
     </div>
     </section>
   );
+}
+
+function buildFormFromTask(task: TaskItem, today: string): typeof emptyTaskForm {
+  const targetDays = task.schedule.type === "once" ? "7" : String(task.schedule.targetDays ?? 7);
+  const streak = task.streak ?? { hardcore: false, initialLives: 0, livesEveryDays: 0 };
+
+  return {
+    ...emptyTaskForm,
+    title: task.title,
+    description: task.description,
+    scheduleType: task.schedule.type,
+    startDate: today,
+    targetDays,
+    infinite: task.schedule.type === "once" ? false : task.schedule.infinite,
+    hardcore: streak.hardcore,
+    initialLives: String(streak.initialLives),
+    livesEveryDays: String(streak.livesEveryDays),
+    weekdays: task.schedule.type === "weekdays" ? task.schedule.weekdays : [1, 2, 3, 4, 5],
+    imageMode: task.thumbnailDataUrl ? "upload" : "url",
+    imageUrl: task.imageUrl ?? "",
+    thumbnailDataUrl: task.thumbnailDataUrl ?? "",
+    subtasks: task.subtasks
+  };
 }
 
 function buildSchedule(form: typeof emptyTaskForm): TaskSchedule {
@@ -632,6 +752,15 @@ function buildSchedule(form: typeof emptyTaskForm): TaskSchedule {
     return { type: "weekdays", startDate: form.startDate, weekdays: form.weekdays.length > 0 ? form.weekdays : [1], targetDays, infinite: form.infinite };
   }
   return { type: "daily", startDate: form.startDate, targetDays, infinite: form.infinite };
+}
+
+function buildStreakSettings(form: typeof emptyTaskForm): TaskStreakSettings | undefined {
+  if (form.scheduleType === "once") return undefined;
+  return {
+    hardcore: form.hardcore,
+    initialLives: Math.max(0, Math.floor(Number(form.initialLives) || 0)),
+    livesEveryDays: Math.max(0, Math.floor(Number(form.livesEveryDays) || 0))
+  };
 }
 
 function extendTaskSchedule(schedule: TaskSchedule): TaskSchedule {
@@ -656,6 +785,31 @@ function isPlannedOn(task: TaskItem, day: string): boolean {
   if (!task.schedule.weekdays.includes(getIsoWeekday(day))) return false;
   if (task.schedule.infinite || !task.schedule.targetDays) return true;
   return countPlannedDaysThrough(task, day) <= task.schedule.targetDays;
+}
+
+function getMissedPlannedDays(task: TaskItem, today: string, completions: TaskCompletion[]): string[] {
+  if (task.schedule.type === "once") return [];
+  const missedDays: string[] = [];
+  const cursor = parseDateKey(task.schedule.startDate);
+  const end = parseDateKey(today);
+  end.setDate(end.getDate() - 1);
+
+  while (cursor <= end) {
+    const day = toDateKey(cursor);
+    if (isPlannedOn(task, day) && !isCompletedOn(task.id, day, completions)) {
+      missedDays.push(day);
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return missedDays;
+}
+
+function getAvailableLives(settings: TaskStreakSettings, completions: TaskCompletion[]): number {
+  const doneDays = completions.filter((completion) => completion.type !== "life").length;
+  const spentLives = completions.filter((completion) => completion.type === "life").length;
+  const earnedLives = settings.livesEveryDays > 0 ? Math.floor(doneDays / settings.livesEveryDays) : 0;
+  return Math.max(0, settings.initialLives + earnedLives - spentLives);
 }
 
 function getIsoWeekday(day: string): number {
@@ -730,18 +884,25 @@ function isCompletedOn(taskId: string, day: string, completions: TaskCompletion[
   return completions.some((completion) => completion.taskId === taskId && completion.localDate === day);
 }
 
+function isLifeCompletion(taskId: string, day: string, completions: TaskCompletion[]): boolean {
+  return completions.some((completion) => completion.taskId === taskId && completion.localDate === day && completion.type === "life");
+}
+
 function getProgress(task: TaskItem, completions: TaskCompletion[], t: (key: MessageKey, values?: Record<string, string | number>) => string): { label: string | null; percent: number | null } {
   if (task.schedule.type === "once") return { label: null, percent: null };
-  const completedDays = completions.filter((completion) => completion.taskId === task.id).length;
-  if (task.schedule.infinite || !task.schedule.targetDays) return { label: t("tasks.days", { count: completedDays }), percent: null };
+  const taskCompletions = completions.filter((completion) => completion.taskId === task.id);
+  const completedDays = taskCompletions.length;
+  const livesLabel = task.streak && !task.streak.hardcore ? ` \u00B7 \u2764\uFE0F ${getAvailableLives(task.streak, taskCompletions)}` : "";
+  if (task.schedule.infinite || !task.schedule.targetDays) return { label: `${t("tasks.days", { count: completedDays })}${livesLabel}`, percent: null };
   return {
-    label: `${completedDays}/${task.schedule.targetDays}`,
+    label: `${completedDays}/${task.schedule.targetDays}${livesLabel}`,
     percent: Math.min(100, Math.round((completedDays / task.schedule.targetDays) * 100))
   };
 }
 
 function getArchiveSubtitle(task: TaskItem, today: string, progressLabel: string | null, t: (key: MessageKey, values?: Record<string, string | number>) => string): string {
   if (task.deleted) return t("tasks.deleteAvailable");
+  if (task.failed) return t("tasks.failedSubtitle");
   if (progressLabel) return progressLabel;
   if (isDueOn(task, today)) return t("tasks.plannedToday");
   return t("tasks.completedSubtitle");

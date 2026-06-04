@@ -19,12 +19,15 @@
 - [x] Added completed/deleted archive screen.
 - [x] Added permanent delete from archive with confirmation.
 - [x] Added finite streak completion dialog with `Extend` / `Finish`.
+- [x] Added optional hardcore streak failure on missed planned days.
+- [x] Added streak lives: missed days can be covered with heart completions, with earned lives after a configured number of done days.
+- [x] Added `Repeat` action for active and archived tasks, opening `New Task` prefilled from the selected task with today's start date.
 
 ### Left
 
 - [ ] Add task editing.
 - [ ] Add uncomplete day / undo completion.
-- [ ] Add real streak calculation: current streak, longest streak, missed scheduled days.
+- [ ] Add real streak analytics: current streak, longest streak, and richer missed-day history.
 - [ ] Add full calendar view by month.
 - [ ] After routing exists, add `Note -> New Task` flow: open the `New Task` screen prefilled from the note instead of directly cloning in place.
 - [ ] Move uploaded images into a dedicated IndexedDB image store instead of keeping compressed data in the task row.

@@ -311,6 +311,8 @@ h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.05; letter-spacing: 0; }
 .task-progress.detail { height: 10px; }
 .task-done-button { align-self: center; justify-self: center; width: 30px; height: 30px; border: 2px solid #c7c7cc; border-radius: 999px; background: transparent; color: white; font-size: 17px; font-weight: 900; }
 .task-done-button.done { border-color: var(--green); background: var(--green); }
+.task-panel-actions { align-self: center; justify-self: center; display: grid; gap: 7px; justify-items: center; padding: 6px 0; }
+.task-repeat-button { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #eef6ff; color: var(--blue); }
 .task-forever-delete-button { align-self: center; justify-self: center; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #fff0f0; color: var(--danger); }
 .danger-icon-button { color: var(--danger); }
 .task-archive-screen { min-height: calc(100vh - 182px); }
@@ -327,6 +329,13 @@ h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.05; letter-spacing: 0; }
 .duration-row { display: grid; grid-template-columns: minmax(0, 120px) minmax(0, 1fr); gap: 10px; align-items: center; }
 .duration-row label { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 750; }
 .duration-row label input { width: auto; }
+.streak-options { display: grid; gap: 8px; }
+.streak-options label { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 750; }
+.streak-options label input { width: auto; }
+.life-settings-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.life-settings-row .life-field { min-width: 0; display: grid; gap: 5px; align-items: stretch; }
+.life-field span { color: var(--muted); font-size: 12px; font-weight: 850; }
+.streak-options .life-field input { width: 100%; }
 .subtask-editor { display: grid; gap: 8px; }
 .subtask-input-row { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px; }
 .subtask-input-row .secondary-button { min-height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
@@ -360,6 +369,7 @@ h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.05; letter-spacing: 0; }
 .task-calendar-day.outside { color: #c7c7cc; }
 .task-calendar-day.due { border: 2px solid #b26b00; color: #9b5a00; }
 .task-calendar-day.done { border-color: var(--green); background: var(--green); color: white; }
+.task-calendar-day.life { border-color: #ff8a9a; background: #fff0f2; color: #e0485d; font-size: 11px; }
 @media (max-width: 620px) {
   .app-shell { padding: 0; }
   .app-content { padding-top: 78px; padding-bottom: 92px; }
@@ -381,6 +391,7 @@ h1 { margin: 0 0 14px; font-size: 30px; line-height: 1.05; letter-spacing: 0; }
   .smart-card span:last-child { font-size: 17px; }
   .task-text span { font-size: 19px; }
   .date-row { grid-template-columns: 1fr; }
+  .life-settings-row { grid-template-columns: 1fr; }
   .reinvest-split, .term-row { grid-template-columns: 1fr; }
   .calculator-metrics { grid-template-columns: 1fr; }
 }
