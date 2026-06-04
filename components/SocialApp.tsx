@@ -47,8 +47,8 @@ type PayoutNotification = {
   body: string;
 };
 
-export default function SocialApp({ activeTab, refreshNonce }: { activeTab: SocialTab; refreshNonce: number }) {
-  const { user, profile, core, loading, refreshing, error, locale, refreshUserData, setLocale, t } = useUserContext();
+export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { activeTab: SocialTab; refreshNonce: number; onRefresh: () => Promise<void> }) {
+  const { user, profile, core, loading, refreshing, error, locale, setLocale, t } = useUserContext();
   const [referralLink, setReferralLink] = useState<ReferralLink | null>(null);
   const [teamContext, setTeamContext] = useState<TeamContext | null>(null);
   const [socialError, setSocialError] = useState<string | null>(null);
@@ -73,7 +73,7 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
     setNotifications(null);
     setNotificationsOpen(false);
     setNotificationsLoading(false);
-  }, [activeTab, refreshNonce, user?.id]);
+  }, [activeTab, user?.id]);
 
   const loadReferralLink = useCallback(async () => {
     if (!user) return;
@@ -121,6 +121,7 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
     }
 
     const load = activeTab === "teams" ? loadTeamContext : loadReferralLink;
+    setSocialError(null);
     load().catch((loadError) => {
       console.warn("Social data load failed", loadError);
       setSocialError(loadError instanceof Error ? loadError.message : "Failed to load social data.");
@@ -199,7 +200,7 @@ export default function SocialApp({ activeTab, refreshNonce }: { activeTab: Soci
           <span>Social</span>
           <h1>{t("profile.title")}</h1>
         </div>
-        <button className="finance-icon-button" type="button" aria-label={t("app.common.refresh")} disabled={refreshing} onClick={() => refreshUserData()}>
+        <button className="finance-icon-button" type="button" aria-label={t("app.common.refresh")} disabled={refreshing} onClick={() => { void onRefresh(); }}>
           <RefreshCw size={19} className={refreshing ? "spin" : ""} />
         </button>
       </header>

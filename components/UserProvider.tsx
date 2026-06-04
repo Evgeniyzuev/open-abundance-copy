@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { claimReferralAfterAuth, claimRegistrationAfterAuth, getBrowserSupabaseClient } from "@/lib/supabaseClient";
 import type { Tables } from "@/lib/database.types";
@@ -33,7 +33,7 @@ type UserContextResponse = {
   error?: string;
 };
 
-const SERVER_FETCH_TIMEOUT_MS = 5_000;
+const SERVER_FETCH_TIMEOUT_MS = 12_000;
 
 const UserContext = createContext<UserContextValue | undefined>(undefined);
 
@@ -47,6 +47,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [pendingLevelUps, setPendingLevelUps] = useState<number[]>([]);
   const [guestLocale, setGuestLocale] = useState<AppLocale>("en");
+  const refreshRequestIdRef = useRef(0);
 
   useEffect(() => {
     setGuestLocale(detectBrowserLocale());
@@ -83,15 +84,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshUserData = useCallback(async () => {
+    const requestId = refreshRequestIdRef.current + 1;
+    refreshRequestIdRef.current = requestId;
     setRefreshing(true);
     setError(null);
-    setProfile(null);
-    setCore(null);
-    setWallet(null);
 
     try {
       if (isOffline()) {
-        clearServerData();
         return;
       }
 
@@ -104,7 +103,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (sessionError) throw sessionError;
 
       if (!session?.access_token) {
-        clearServerData();
+        if (isLatestRefresh(requestId, refreshRequestIdRef)) clearServerData();
         return;
       }
 
@@ -117,20 +116,32 @@ export function UserProvider({ children }: { children: ReactNode }) {
       });
       const payload = (await response.json()) as UserContextResponse;
 
+      if (response.status === 401) {
+        if (isLatestRefresh(requestId, refreshRequestIdRef)) {
+          clearServerData();
+          setError(payload.error ?? "Session expired. Sign in again.");
+        }
+        return;
+      }
+
       if (!response.ok || payload.error) {
         throw new Error(payload.error ?? "Failed to refresh user data.");
       }
 
+      if (!isLatestRefresh(requestId, refreshRequestIdRef)) return;
       setUser(payload.user);
       setProfile(payload.profile);
       setCore(payload.core);
       setWallet(payload.wallet);
     } catch (refreshError) {
-      clearServerData();
-      setError(refreshError instanceof Error ? refreshError.message : "Failed to refresh user data.");
+      if (isLatestRefresh(requestId, refreshRequestIdRef)) {
+        setError(refreshError instanceof Error ? refreshError.message : "Failed to refresh user data.");
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isLatestRefresh(requestId, refreshRequestIdRef)) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [clearServerData]);
 
@@ -330,6 +341,10 @@ export function useUserContext(): UserContextValue {
 
 function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+function isLatestRefresh(requestId: number, ref: { current: number }): boolean {
+  return requestId === ref.current;
 }
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Promise<Response> {

@@ -65,7 +65,6 @@ const socialTabs: TopTab[] = [
   { id: "teams", titleKey: "app.nav.people", icon: Users }
 ];
 
-const REFRESH_COOLDOWN_MS = 5_000;
 const PULL_THRESHOLD_PX = 72;
 const NAV_HIDE_DELTA_PX = 8;
 
@@ -79,7 +78,8 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
-  const lastRefreshAtRef = useRef(0);
+  const refreshInFlightRef = useRef(false);
+  const refreshQueuedRef = useRef(false);
   const pullDistanceRef = useRef(0);
   const touchStartYRef = useRef(0);
   const lastGestureTouchYRef = useRef(0);
@@ -93,6 +93,27 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
 
     setNavHidden(true);
   }, []);
+
+  const requestServerRefresh = useCallback(async (reason: string) => {
+    if (refreshInFlightRef.current) {
+      refreshQueuedRef.current = true;
+      return;
+    }
+
+    refreshInFlightRef.current = true;
+
+    try {
+      do {
+        refreshQueuedRef.current = false;
+        await refreshUserData();
+        setRefreshNonce((value) => value + 1);
+      } while (refreshQueuedRef.current);
+    } catch (refreshError) {
+      console.warn(`Server refresh failed after ${reason}`, refreshError);
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  }, [refreshUserData]);
 
   useEffect(() => {
     let lastScrollY = window.scrollY;
@@ -127,22 +148,10 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   useEffect(() => {
     if (!isServerBackedView(activeMainTab, activeGoalTab)) return;
 
-    refreshUserData().catch((refreshError) => {
-      console.warn("Server-backed tab refresh failed", refreshError);
-    });
-  }, [activeGoalTab, activeMainTab, activeSocialTab, activeWalletTab, refreshUserData]);
+    void requestServerRefresh("tab change");
+  }, [activeGoalTab, activeMainTab, activeSocialTab, activeWalletTab, requestServerRefresh]);
 
   useEffect(() => {
-    const requestRefresh = () => {
-      const now = Date.now();
-      if (now - lastRefreshAtRef.current < REFRESH_COOLDOWN_MS) return;
-      lastRefreshAtRef.current = now;
-      refreshUserData().catch((refreshError) => {
-        console.warn("Pull-to-refresh user data failed", refreshError);
-      });
-      setRefreshNonce((value) => value + 1);
-    };
-
     const handleTouchStart = (event: TouchEvent) => {
       if (event.touches.length !== 1) return;
       const touchY = event.touches[0].clientY;
@@ -169,7 +178,9 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
     };
 
     const handleTouchEnd = () => {
-      if (pullDistanceRef.current >= PULL_THRESHOLD_PX) requestRefresh();
+      if (pullDistanceRef.current >= PULL_THRESHOLD_PX && isServerBackedView(activeMainTab, activeGoalTab)) {
+        void requestServerRefresh("pull-to-refresh");
+      }
       touchStartYRef.current = 0;
       lastGestureTouchYRef.current = 0;
       pullDistanceRef.current = 0;
@@ -188,7 +199,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
       window.removeEventListener("touchend", handleTouchEnd);
       window.removeEventListener("touchcancel", handleTouchEnd);
     };
-  }, [refreshUserData, updateNavFromScrollIntent]);
+  }, [activeGoalTab, activeMainTab, requestServerRefresh, updateNavFromScrollIntent]);
 
   const currentTitle = getCurrentTitle(activeMainTab, activeGoalTab, t);
   const showNotes = activeMainTab === "goals" && activeGoalTab === "notes";
@@ -216,9 +227,9 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
         {showNotes ? notesSlot : null}
         {showWishes ? <RecommendedWishes refreshNonce={refreshNonce} /> : null}
         {showChecks ? <TasksApp /> : null}
-        {showChallenges ? <ChallengesApp refreshNonce={refreshNonce} /> : null}
-        {showWallet ? <WalletApp activeTab={activeWalletTab} refreshNonce={refreshNonce} /> : null}
-        {showPeople ? <SocialApp activeTab={activeSocialTab} refreshNonce={refreshNonce} /> : null}
+        {showChallenges ? <ChallengesApp refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("challenges")} /> : null}
+        {showWallet ? <WalletApp activeTab={activeWalletTab} refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("wallet")} /> : null}
+        {showPeople ? <SocialApp activeTab={activeSocialTab} refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("social")} /> : null}
         {!showNotes && !showWishes && !showChecks && !showChallenges && !showWallet && !showPeople ? <PlaceholderScreen title={currentTitle} /> : null}
       </section>
       <BottomTabBar activeTab={activeMainTab} hidden={navHidden} t={t} onTabChange={setActiveMainTab} />

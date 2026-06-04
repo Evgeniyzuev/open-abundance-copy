@@ -48,9 +48,10 @@ const DEFAULT_USER_LEVEL = 1;
 
 type ChallengesAppProps = {
   refreshNonce: number;
+  onRefresh: () => Promise<void>;
 };
 
-export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
+export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesAppProps) {
   const [acceptedChallenges, setAcceptedChallenges] = useState<Challenge[]>([]);
   const [completedChallenges, setCompletedChallenges] = useState<Challenge[]>([]);
   const [availableChallenges, setAvailableChallenges] = useState<Challenge[]>([]);
@@ -59,17 +60,15 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
   const [completedOpen, setCompletedOpen] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "offline">("loading");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const { user, profile, core, locale, refreshUserData, t } = useUserContext();
+  const { user, profile, core, locale, t } = useUserContext();
   const userLevel = core?.level ?? profile?.level ?? DEFAULT_USER_LEVEL;
+  const hasChallenges = availableChallenges.length > 0 || acceptedChallenges.length > 0 || completedChallenges.length > 0;
 
   const loadChallenges = useCallback(async ({ isMounted = () => true }: { isMounted?: () => boolean } = {}) => {
-    setStatus("loading");
-    setAvailableChallenges([]);
-    setAcceptedChallenges([]);
-    setCompletedChallenges([]);
+    setStatus((current) => current === "ready" ? current : "loading");
 
     if (!navigator.onLine) {
-      setStatus("offline");
+      setStatus((current) => current === "ready" ? current : "offline");
       return;
     }
 
@@ -112,10 +111,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
       setStatus("ready");
     } catch {
       if (isMounted()) {
-        setAvailableChallenges([]);
-        setAcceptedChallenges([]);
-        setCompletedChallenges([]);
-        setStatus("offline");
+        setStatus((current) => current === "ready" ? current : "offline");
       }
     } finally {
       if (isMounted()) setIsRefreshing(false);
@@ -213,7 +209,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
             onAccept={() => acceptChallenge(selectedChallenge)}
             onClose={() => setSelectedChallenge(null)}
             onComplete={completeChallenge}
-            onRefreshUserData={refreshUserData}
+            onRefreshUserData={onRefresh}
           />
         ) : null}
 
@@ -232,8 +228,8 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
         {isRefreshing ? <small>{t("wishes.refreshing")}</small> : null}
       </header>
 
-      {status === "loading" ? <ChallengeState title={t("app.common.loading")} description={t("challenges.loading.description")} /> : null}
-      {status === "offline" ? <ChallengeState title={t("app.common.offline")} description={t("challenges.offline.description")} /> : null}
+      {status === "loading" && !hasChallenges ? <ChallengeState title={t("app.common.loading")} description={t("challenges.loading.description")} /> : null}
+      {status === "offline" && !hasChallenges ? <ChallengeState title={t("app.common.offline")} description={t("challenges.offline.description")} /> : null}
 
       <ChallengeSection challenges={availableChallenges} emptyMessage={t("challenges.emptyArchive")} locale={locale} title={t("challenges.available")} userLevel={userLevel} t={t} onOpen={(challenge) => setSelectedChallenge(challenge)} />
 
@@ -258,7 +254,7 @@ export default function ChallengesApp({ refreshNonce }: ChallengesAppProps) {
           onAccept={() => acceptChallenge(selectedChallenge)}
           onClose={() => setSelectedChallenge(null)}
           onComplete={completeChallenge}
-          onRefreshUserData={refreshUserData}
+          onRefreshUserData={onRefresh}
         />
       ) : null}
 

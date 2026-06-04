@@ -32,13 +32,10 @@ export default function RecommendedWishes({ refreshNonce }: RecommendedWishesPro
     let mounted = true;
 
     async function loadWishes() {
-      setWishes([]);
-      setSelectedWish(null);
-      setStatus("loading");
-      setIsRefreshing(false);
+      setStatus((current) => current === "ready" ? current : "loading");
 
       if (!navigator.onLine) {
-        setStatus("offline");
+        setStatus((current) => current === "ready" ? current : "offline");
         return;
       }
 
@@ -64,8 +61,7 @@ export default function RecommendedWishes({ refreshNonce }: RecommendedWishesPro
         }
       } catch {
         if (mounted) {
-          setWishes([]);
-          setStatus("offline");
+          setStatus((current) => current === "ready" ? current : "offline");
         }
       } finally {
         if (mounted) setIsRefreshing(false);
@@ -80,8 +76,8 @@ export default function RecommendedWishes({ refreshNonce }: RecommendedWishesPro
 
   return (
     <section className="wishes-screen">
-      {status === "loading" ? <WishOfflineState title={t("app.common.loading")} description={t("wishes.loading.description")} /> : null}
-      {status === "offline" ? <WishOfflineState title={t("app.common.offline")} description={t("wishes.offline.description")} /> : null}
+      {status === "loading" && wishes.length === 0 ? <WishOfflineState title={t("app.common.loading")} description={t("wishes.loading.description")} /> : null}
+      {status === "offline" && wishes.length === 0 ? <WishOfflineState title={t("app.common.offline")} description={t("wishes.offline.description")} /> : null}
       {wishes.length > 0 ? (
         <>
         {isRefreshing ? <div className="wishes-refreshing">{t("wishes.refreshing")}</div> : null}

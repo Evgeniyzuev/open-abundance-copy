@@ -35,8 +35,8 @@ type CalculatorMode = "future" | "target";
 type TargetKind = "core" | "daily";
 type TermUnit = "days" | "months" | "years";
 
-export default function WalletApp({ activeTab, refreshNonce }: { activeTab: WalletTab; refreshNonce: number }) {
-  const { core, wallet, user, loading, refreshing, error, locale, refreshUserData, t } = useUserContext();
+export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { activeTab: WalletTab; refreshNonce: number; onRefresh: () => Promise<void> }) {
+  const { core, wallet, user, loading, refreshing, error, locale, t } = useUserContext();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyRows, setHistoryRows] = useState<CoreAccrualRow[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -73,7 +73,7 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
     setWalletHistoryRows(null);
     setWalletHistoryLoading(false);
     setWalletHistoryError(null);
-  }, [activeTab, refreshNonce, user?.id]);
+  }, [activeTab, user?.id]);
 
   useEffect(() => {
     let mounted = true;
@@ -81,7 +81,6 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
     async function loadHistory() {
       if (activeTab !== "core" || !historyOpen || !user) return;
 
-      setHistoryRows(null);
       setHistoryError(null);
 
       if (!navigator.onLine) {
@@ -113,7 +112,6 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
     async function loadHistory() {
       if (activeTab !== "wallet" || !walletHistoryOpen || !user) return;
 
-      setWalletHistoryRows(null);
       setWalletHistoryError(null);
 
       if (!navigator.onLine) {
@@ -190,7 +188,7 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
       const payload = (await response.json()) as { error?: string };
 
       if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to save reinvest.");
-      await refreshUserData();
+      await onRefresh();
     } catch (saveError) {
       setReinvestError(saveError instanceof Error ? saveError.message : "Failed to save reinvest.");
     } finally {
@@ -258,7 +256,7 @@ export default function WalletApp({ activeTab, refreshNonce }: { activeTab: Wall
           <span>Finance</span>
           <h1>{t("wallet.title")}</h1>
         </div>
-        <button className="finance-icon-button" type="button" aria-label={t("app.common.refresh")} disabled={refreshing} onClick={() => refreshUserData()}>
+        <button className="finance-icon-button" type="button" aria-label={t("app.common.refresh")} disabled={refreshing} onClick={() => { void onRefresh(); }}>
           <RefreshCw size={19} className={refreshing ? "spin" : ""} />
         </button>
       </header>
