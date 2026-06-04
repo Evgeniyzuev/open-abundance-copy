@@ -1,5 +1,6 @@
 const CACHE_NAME = "open-abundance-v6";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/icon.svg", "/icons/icon2.svg"];
+const NAVIGATION_NETWORK_TIMEOUT_MS = 700;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -45,11 +46,17 @@ async function handleNavigation(request, event) {
     return fetchPromise.catch(() => offlineResponse());
   }
 
+  event.waitUntil(fetchPromise.catch(() => undefined));
+
   if (self.navigator && self.navigator.onLine === false) {
     return cachedShell;
   }
 
-  return fetchPromise.catch(() => cachedShell);
+  const timeoutPromise = new Promise((resolve) => {
+    setTimeout(() => resolve(cachedShell), NAVIGATION_NETWORK_TIMEOUT_MS);
+  });
+
+  return Promise.race([fetchPromise, timeoutPromise]).catch(() => cachedShell);
 }
 
 async function handleAsset(request, event) {

@@ -57,7 +57,7 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
   const [simulationReinvest, setSimulationReinvest] = useState("0");
   const [termValue, setTermValue] = useState("30");
   const [termUnit, setTermUnit] = useState<TermUnit>("years");
-  const [targetCore, setTargetCore] = useState("10000");
+  const [targetCore, setTargetCore] = useState("1000000");
   const [targetDailyIncome, setTargetDailyIncome] = useState("10");
   const [targetCalculationTouched, setTargetCalculationTouched] = useState(false);
 

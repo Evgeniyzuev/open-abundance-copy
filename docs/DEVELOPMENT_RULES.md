@@ -46,6 +46,22 @@ Why this matters: after `guestIdentity` moved the shared DB to version 4, `notes
 
 For MVP, notes and tasks/streaks are local-only. Do not make their create/update/delete flows wait for Supabase sync unless a dedicated sync plan is being implemented and tested offline.
 
+## Server-Backed API Freshness
+
+For server-source-of-truth data, do not rely on browser, CDN, or Next route caching.
+
+Server-backed API routes that return user-specific or frequently changing data must:
+
+- return `NO_STORE_HEADERS` from `lib/httpCache.ts`;
+- include Vercel/CDN no-store headers through that shared helper;
+- use `export const dynamic = "force-dynamic"` for GET route handlers;
+- use `export const revalidate = 0` and `export const fetchCache = "force-no-store"` for critical GET routes such as `/api/user/context` and `/api/challenges`;
+- keep client fetches on these endpoints as `cache: "no-store"` and use a timestamp query when repeated manual refreshes are possible.
+
+Before adding complex refresh timing, race guards, or debug fields for stale server UI, first verify that the endpoint cannot be served from cache. A stale `/api/user/context` or `/api/challenges` response can make correct database writes look like UI state bugs.
+
+Temporary API debug fields such as `debug.supabaseProjectRef`, `debug.serverReadAt`, `viewerUserId`, and counters are acceptable while diagnosing environment or cache issues, but should be removed or gated once the production deployment is confirmed fresh.
+
 ## Frontend Verification
 
 After frontend UI changes, try to verify the result visually in the in-app browser.

@@ -236,3 +236,36 @@ Basic conflict behavior:
 Personal data sync is a journal of explicit user actions, not a mirror operation where one empty side wipes the other.
 
 Financial data is command/query based, with the server/database as the authority.
+
+## Server-Backed Refresh Freshness
+
+The local-first scope is limited to personal offline working data such as notes and tasks. Server-backed screens such as challenges, profile, core, teams, and wallet should treat the database/API response as the source of truth.
+
+For these server-backed screens, stale UI can be caused by HTTP/CDN/route caching even when Supabase writes are correct. The expected freshness setup is:
+
+- API responses use `NO_STORE_HEADERS` from `lib/httpCache.ts`, including Vercel/CDN no-store headers.
+- Critical GET route handlers use `dynamic = "force-dynamic"`, `revalidate = 0`, and `fetchCache = "force-no-store"`.
+- Client refresh calls use `cache: "no-store"` and a timestamp query parameter for repeated manual refreshes.
+- Service worker fetch handling must pass `/api/*` requests directly to network with `cache: "no-store"` and must not cache API JSON.
+- Navigation/app-shell handling may use a short network-first timeout and then fall back to the cached shell, so offline startup stays instant.
+
+This keeps notes/tasks instant and offline-friendly while preventing server-backed UI from being overwritten by stale server responses.
+
+## Cleanup Notes After Cache Fix
+
+The stale challenge/core/wallet issue was most likely caused by cached server-backed API responses, not by local-first notes/tasks.
+
+Changes from the investigation that are probably temporary and can be removed after production is confirmed stable:
+
+- API response debug blocks with `debug.supabaseProjectRef` and `debug.serverReadAt`.
+- Diagnostic response fields used only to prove auth/read context, such as `viewerUserId`, `authenticated`, and `userChallengeCount`, unless the UI still needs them for safety.
+- Any one-off `needsClientRefresh` response flag left from the reinvest investigation.
+- A very short service worker update check interval, such as 30 seconds, if it was only used to make the fixed deployment arrive faster. Restore a calmer interval after update delivery is confirmed, but keep the short navigation fallback timeout for offline startup.
+
+Changes that are still useful as defensive behavior and should not be removed just because caching was the root cause:
+
+- stale-while-refresh UI behavior;
+- not clearing old server data before a refresh succeeds;
+- not applying guest or wrong-session challenge payloads to authenticated UI;
+- out-of-order request guards around user context and challenge reloads;
+- local-first notes/tasks remaining independent from Supabase reads.
