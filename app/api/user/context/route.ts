@@ -4,6 +4,8 @@ import { NO_STORE_HEADERS } from "@/lib/httpCache";
 import type { Database } from "@/lib/database.types";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 export async function GET(request: NextRequest) {
   const supabaseUrl = process.env.SUPABASE_URL;
