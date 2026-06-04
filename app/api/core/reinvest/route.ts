@@ -64,7 +64,8 @@ export async function POST(request: NextRequest) {
       serverReadAt: new Date().toISOString()
     },
     userId: user.id,
-    core
+    core,
+    needsClientRefresh: true // <<< Новый флаг для принудительного обновления клиента
   });
 }
 
