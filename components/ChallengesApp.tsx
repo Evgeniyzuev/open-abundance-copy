@@ -168,20 +168,44 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
       },
       body: JSON.stringify({ challengeId: challenge.id })
     });
-    const payload = (await response.json()) as { error?: string };
+    const payload = (await response.json()) as { status?: ChallengeStatus; error?: string };
 
     if (!response.ok || payload.error) {
       throw new Error(payload.error ?? "Failed to accept challenge.");
     }
 
+    applyChallengeStatus(challenge.id, payload.status ?? "accepted");
     setSelectedChallenge(null);
+    await onRefresh();
     await loadChallenges();
   }
 
   function completeChallenge(challenge: Challenge, reward: { amount: number; account: string; claimed: boolean }) {
+    applyChallengeStatus(challenge.id, "completed");
     setSelectedChallenge({ ...challenge, user_challenge_status: "completed" });
     setCompletionReward(reward);
     void loadChallenges();
+  }
+
+  function applyChallengeStatus(challengeId: string, status: ChallengeStatus) {
+    const updateChallenge = (challenge: Challenge): Challenge => challenge.id === challengeId ? { ...challenge, user_challenge_status: status } : challenge;
+    const isTarget = (challenge: Challenge) => challenge.id === challengeId;
+    const currentChallenge = [...availableChallenges, ...acceptedChallenges, ...completedChallenges].find(isTarget);
+    const nextChallenge = currentChallenge ? updateChallenge(currentChallenge) : undefined;
+
+    setAvailableChallenges((challenges) => challenges.filter((challenge) => challenge.id !== challengeId).map(updateChallenge));
+    setAcceptedChallenges((challenges) => {
+      const nextChallenges = challenges.filter((challenge) => challenge.id !== challengeId).map(updateChallenge);
+      return status === "accepted" || status === "failed"
+        ? [...nextChallenges, nextChallenge].filter(Boolean) as Challenge[]
+        : nextChallenges;
+    });
+    setCompletedChallenges((challenges) => {
+      const nextChallenges = challenges.filter((challenge) => challenge.id !== challengeId).map(updateChallenge);
+      return status === "completed"
+        ? [...nextChallenges, nextChallenge].filter(Boolean) as Challenge[]
+        : nextChallenges;
+    });
   }
 
   if (completedOpen) {

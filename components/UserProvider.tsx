@@ -21,6 +21,7 @@ type UserContextValue = {
   error: string | null;
   locale: AppLocale;
   refreshUserData: () => Promise<void>;
+  applyServerData: (data: Partial<UserContextResponse>) => void;
   setLocale: (nextLocale: AppLocale) => Promise<void>;
   t: (key: MessageKey, values?: Record<string, string | number>) => string;
 };
@@ -144,6 +145,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
       }
     }
   }, [clearServerData]);
+
+  const applyServerData = useCallback((data: Partial<UserContextResponse>) => {
+    if ("user" in data) setUser(data.user ?? null);
+    if ("profile" in data) setProfile(data.profile ?? null);
+    if ("core" in data) setCore(data.core ?? null);
+    if ("wallet" in data) setWallet(data.wallet ?? null);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -313,10 +321,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
       error,
       locale,
       refreshUserData,
+      applyServerData,
       setLocale,
       t
     }),
-    [core, error, loading, locale, profile, refreshUserData, refreshing, setLocale, t, user, wallet]
+    [applyServerData, core, error, loading, locale, profile, refreshUserData, refreshing, setLocale, t, user, wallet]
   );
 
   return (

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-const APP_UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+const APP_UPDATE_CHECK_INTERVAL_MS = 30 * 1000;
 const DEV_SW_RELOAD_KEY = "open-abundance:dev-sw-cleanup-reload";
 const SW_CONTROLLER_RELOAD_KEY = "open-abundance:sw-controller-reload";
 

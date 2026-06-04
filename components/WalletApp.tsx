@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Calculator, Check, ChevronDown, ChevronUp, RefreshCw, RotateCcw, TrendingUp } from "lucide-react";
-import { useUserContext } from "@/components/UserProvider";
+import { type CoreAccount, useUserContext } from "@/components/UserProvider";
 import { calculateDailyIncome, calculateFutureCore, coreRequiredForDailyIncome, daysFromTerm, findDaysToTarget, formatDurationParts, normalizePercent } from "@/lib/coreCalculator";
 import type { AppLocale } from "@/lib/i18n";
 import { formatAdaptiveMoney, formatMoney } from "@/lib/moneyFormat";
@@ -36,7 +36,7 @@ type TargetKind = "core" | "daily";
 type TermUnit = "days" | "months" | "years";
 
 export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { activeTab: WalletTab; refreshNonce: number; onRefresh: () => Promise<void> }) {
-  const { core, wallet, user, loading, refreshing, error, locale, t } = useUserContext();
+  const { core, wallet, user, loading, refreshing, error, locale, applyServerData, t } = useUserContext();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyRows, setHistoryRows] = useState<CoreAccrualRow[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -185,9 +185,10 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
         },
         body: JSON.stringify({ reinvestPercent: Number(reinvestValue) })
       });
-      const payload = (await response.json()) as { error?: string };
+      const payload = (await response.json()) as { core?: CoreAccount; error?: string };
 
       if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to save reinvest.");
+      if (payload.core) applyServerData({ core: payload.core });
       await onRefresh();
     } catch (saveError) {
       setReinvestError(saveError instanceof Error ? saveError.message : "Failed to save reinvest.");
