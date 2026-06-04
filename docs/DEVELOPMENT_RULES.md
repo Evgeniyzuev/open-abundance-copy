@@ -1,5 +1,11 @@
 # Development Rules
 
+## Always Read These Rules
+
+At the start of any coding task in this repository, read this file unless it is already visible in the current context. Treat it as the project-specific operating checklist.
+
+Do this even if the user does not mention the file in the request.
+
 ## UTF-8 And PowerShell
 
 Most source files in this project are UTF-8 and contain Russian UI text.
@@ -56,6 +62,18 @@ f:\git\
   abundance-effect\          old app, reference only
   abundance-effect-pwa\      new app, main repo
 ```
+
+## Verification Command Habits
+
+In this Windows workspace, `pnpm test:e2e` may fail inside the sandbox with `Access denied` before Playwright starts. When running the e2e smoke test for this repo, request escalation for `pnpm test:e2e` immediately instead of first spending a failed sandbox attempt.
+
+`pnpm exec tsc --noEmit` updates the tracked `tsconfig.tsbuildinfo` file as a side effect. Do not commit that file when it changed only because of verification. Restore only that file after typecheck:
+
+```powershell
+git restore tsconfig.tsbuildinfo
+```
+
+Do not delete `tsconfig.tsbuildinfo`; it is a tracked TypeScript build-info file in this repo. Only revert incidental verification changes to it.
 
 ## Docs Status Updates
 
