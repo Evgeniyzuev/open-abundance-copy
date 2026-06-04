@@ -51,6 +51,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const refreshRequestIdRef = useRef(0);
   const serverDataVersionRef = useRef(0);
   const currentUserIdRef = useRef<string | null>(null);
+  const claimInFlightRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     setGuestLocale(detectBrowserLocale());
@@ -173,6 +174,24 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if ("wallet" in data) setWallet(data.wallet ?? null);
   }, []);
 
+  const claimCurrentUserIfNeeded = useCallback(async () => {
+    if (claimInFlightRef.current) return claimInFlightRef.current;
+
+    claimInFlightRef.current = (async () => {
+      const guest = await getOrCreateLocalGuest();
+      if (guest.claimedUserId) return;
+
+      const userId = await claimRegistrationAfterAuth();
+      await markLocalGuestClaimed(userId);
+      await claimReferralAfterAuth(guest.pendingReferral, guest.guestId);
+      await markPendingReferralClaimed();
+    })().finally(() => {
+      claimInFlightRef.current = null;
+    });
+
+    return claimInFlightRef.current;
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     const supabase = getBrowserSupabaseClient();
@@ -194,10 +213,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
 
       if (session && !guest.claimedUserId) {
-        const userId = await claimRegistrationAfterAuth();
-        await markLocalGuestClaimed(userId);
-        await claimReferralAfterAuth(guest.pendingReferral, guest.guestId);
-        await markPendingReferralClaimed();
+        await claimCurrentUserIfNeeded();
       }
 
       if (mounted) await refreshUserData();
@@ -215,13 +231,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       data: { subscription }
     } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN") {
-        getOrCreateLocalGuest()
-          .then(async (guest) => {
-            const userId = await claimRegistrationAfterAuth();
-            await markLocalGuestClaimed(userId);
-            await claimReferralAfterAuth(guest.pendingReferral, guest.guestId);
-            await markPendingReferralClaimed();
-          })
+        claimCurrentUserIfNeeded()
           .then(() => refreshUserData())
           .catch((claimError) => {
             console.warn("Registration claim failed", claimError);
@@ -241,7 +251,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [clearServerData, refreshUserData]);
+  }, [claimCurrentUserIfNeeded, clearServerData, refreshUserData]);
 
   useEffect(() => {
     const refreshAfterReconnect = () => {

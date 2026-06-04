@@ -67,7 +67,15 @@ export async function POST(request: NextRequest) {
   }
 
   if (existing?.status === "completed") {
-    return NextResponse.json({ userId: user.id, challengeId: challenge.id, status: "completed" });
+    return NextResponse.json({
+      debug: {
+        supabaseProjectRef: getSupabaseProjectRef(supabaseUrl),
+        serverReadAt: new Date().toISOString()
+      },
+      userId: user.id,
+      challengeId: challenge.id,
+      status: "completed"
+    });
   }
 
   const { error: upsertError } = await supabase.from("user_challenges").upsert(
@@ -84,9 +92,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: upsertError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ userId: user.id, challengeId: challenge.id, status: "accepted" });
+  return NextResponse.json({
+    debug: {
+      supabaseProjectRef: getSupabaseProjectRef(supabaseUrl),
+      serverReadAt: new Date().toISOString()
+    },
+    userId: user.id,
+    challengeId: challenge.id,
+    status: "accepted"
+  });
 }
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function getSupabaseProjectRef(supabaseUrl: string): string {
+  try {
+    return new URL(supabaseUrl).hostname.split(".")[0] ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }

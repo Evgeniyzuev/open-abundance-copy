@@ -46,6 +46,10 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(
     {
+      debug: {
+        supabaseProjectRef: getSupabaseProjectRef(supabaseUrl),
+        serverReadAt: new Date().toISOString()
+      },
       user,
       profile: profileResult.data,
       core: coreResult.data,
@@ -53,4 +57,12 @@ export async function GET(request: NextRequest) {
     },
     { headers: NO_STORE_HEADERS }
   );
+}
+
+function getSupabaseProjectRef(supabaseUrl: string): string {
+  try {
+    return new URL(supabaseUrl).hostname.split(".")[0] ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }

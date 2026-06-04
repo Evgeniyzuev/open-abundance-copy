@@ -71,6 +71,10 @@ export async function POST(request: NextRequest) {
     );
 
     return NextResponse.json({
+      debug: {
+        supabaseProjectRef: getSupabaseProjectRef(supabaseUrl),
+        serverReadAt: new Date().toISOString()
+      },
       userId: user.id,
       challengeId: challenge.id,
       status: "accepted",
@@ -106,6 +110,10 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({
+    debug: {
+      supabaseProjectRef: getSupabaseProjectRef(supabaseUrl),
+      serverReadAt: new Date().toISOString()
+    },
     userId: user.id,
     challengeId: challenge.id,
     status: result?.challenge_status ?? "completed",
@@ -190,4 +198,12 @@ function isUuid(value: string): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function getSupabaseProjectRef(supabaseUrl: string): string {
+  try {
+    return new URL(supabaseUrl).hostname.split(".")[0] ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }

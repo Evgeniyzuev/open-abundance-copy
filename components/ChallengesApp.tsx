@@ -51,6 +51,7 @@ type CheckChallengeResponse = {
 };
 
 const DEFAULT_USER_LEVEL = 1;
+const VISIBLE_REFRESH_COOLDOWN_MS = 30_000;
 
 type ChallengesAppProps = {
   refreshNonce: number;
@@ -69,6 +70,7 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
   const { user, profile, core, locale, applyServerData, t } = useUserContext();
   const loadRequestIdRef = useRef(0);
   const challengeMutationVersionRef = useRef(0);
+  const lastVisibleRefreshAtRef = useRef(0);
   const userLevel = core?.level ?? profile?.level ?? DEFAULT_USER_LEVEL;
   const hasChallenges = availableChallenges.length > 0 || acceptedChallenges.length > 0 || completedChallenges.length > 0;
 
@@ -165,9 +167,12 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
     let mounted = true;
 
     const refreshVisibleChallenges = () => {
-      if (document.visibilityState === "visible") {
-        loadChallenges({ isMounted: () => mounted });
-      }
+      if (document.visibilityState !== "visible") return;
+
+      const now = Date.now();
+      if (now - lastVisibleRefreshAtRef.current < VISIBLE_REFRESH_COOLDOWN_MS) return;
+      lastVisibleRefreshAtRef.current = now;
+      loadChallenges({ isMounted: () => mounted });
     };
 
     window.addEventListener("focus", refreshVisibleChallenges);

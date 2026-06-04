@@ -58,5 +58,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Core is not created yet." }, { status: 404 });
   }
 
-  return NextResponse.json({ core });
+  return NextResponse.json({
+    debug: {
+      supabaseProjectRef: getSupabaseProjectRef(supabaseUrl),
+      serverReadAt: new Date().toISOString()
+    },
+    userId: user.id,
+    core
+  });
+}
+
+function getSupabaseProjectRef(supabaseUrl: string): string {
+  try {
+    return new URL(supabaseUrl).hostname.split(".")[0] ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }
