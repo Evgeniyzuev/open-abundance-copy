@@ -181,6 +181,27 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .referral-box p, .team-summary p { max-width: 100%; overflow-wrap: anywhere; }
 .referral-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .team-summary strong { font-size: 20px; }
+.inline-profile-button { max-width: 100%; overflow: hidden; background: transparent; color: var(--text); font-size: 20px; font-weight: 900; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+.compact-profile-list { width: 100%; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.compact-profile-button { min-height: 30px; max-width: 100%; overflow: hidden; border-radius: 999px; padding: 0 10px; background: #eef6ff; color: var(--blue); font-size: 12px; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
+.public-profile-box { width: 100%; display: grid; gap: 9px; justify-items: stretch; margin-top: 8px; border-radius: 12px; padding: 12px; background: #f7f8fb; text-align: left; }
+.section-heading-row { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.section-heading-row > span { color: var(--muted); font-size: 12px; font-weight: 850; text-transform: uppercase; }
+.section-heading-row > strong { color: var(--blue); font-size: 15px; }
+.profile-editor { display: grid; gap: 9px; }
+.profile-editor textarea, .profile-editor select { width: 100%; border: 1px solid var(--line); border-radius: 10px; outline: 0; padding: 10px; background: #fff; color: var(--text); font: inherit; }
+.profile-editor textarea { min-height: 92px; resize: vertical; }
+.visibility-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.profile-links { display: flex; flex-wrap: wrap; gap: 7px; }
+.profile-links a { min-height: 32px; max-width: 100%; display: inline-flex; align-items: center; gap: 6px; overflow: hidden; border-radius: 999px; padding: 0 10px; background: #eef6ff; color: var(--blue); font-size: 13px; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
+.contact-list { display: grid; gap: 7px; }
+.contact-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; border-radius: 10px; padding: 8px; background: var(--surface); box-shadow: 0 8px 18px rgba(25,25,35,0.05); }
+.contact-row > button:first-child { min-width: 0; display: grid; gap: 2px; background: transparent; color: var(--text); text-align: left; }
+.contact-row span { overflow: hidden; font-size: 15px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.contact-row small { color: var(--muted); font-size: 12px; font-weight: 800; }
+.public-profile-modal { position: relative; justify-items: center; text-align: center; }
+.modal-close { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #f1f2f7; color: var(--muted); }
+.finance-error.neutral { color: var(--muted); text-align: center; }
 .history-section { width: 100%; margin: 10px 4px 0; }
 .profile-panel .history-section { margin-left: 0; margin-right: 0; }
 .history-toggle { width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-radius: 12px; padding: 0 13px; background: rgba(255,255,255,0.78); color: var(--text); font-weight: 850; text-align: left; box-shadow: 0 8px 20px rgba(25,25,35,0.06); }

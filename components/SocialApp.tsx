@@ -1,12 +1,13 @@
 "use client";
 
-import { Bell, ChevronDown, ChevronUp, Copy, Languages, Link, RefreshCw, Share2, UserRound, Users } from "lucide-react";
+import { Bell, ChevronDown, ChevronUp, Copy, Edit3, ExternalLink, Languages, Link, RefreshCw, Save, Share2, Trash2, UserRound, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useUserContext } from "@/components/UserProvider";
-import type { AppLocale } from "@/lib/i18n";
+import type { AppLocale, MessageKey } from "@/lib/i18n";
 import { formatAdaptiveMoney as formatMoney } from "@/lib/moneyFormat";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
+import { DEFAULT_PROFILE_VISIBILITY_SETTINGS, PROFILE_VISIBILITY_KEYS, PROFILE_VISIBILITY_LEVELS, type ProfileVisibility, type ProfileVisibilityKey, type ProfileVisibilitySettings } from "@/lib/socialProfile";
 
 type SocialTab = "profile" | "teams";
 type ReferralLink = { code: string; url: string };
@@ -46,6 +47,52 @@ type PayoutNotification = {
   title: string;
   body: string;
 };
+type ProfileLinkRow = {
+  id: string;
+  user_id: string;
+  link_type: string;
+  label: string | null;
+  url: string;
+  visibility: string;
+  sort_order: number;
+};
+type ContactRow = {
+  owner_user_id: string;
+  contact_user_id: string;
+  source: string;
+  status: string;
+  is_required: boolean;
+  profile: TeamProfile | null;
+};
+type SocialProfilePayload = {
+  profile: { bio: string | null } | null;
+  visibilitySettings: ProfileVisibilitySettings;
+  links: ProfileLinkRow[];
+  contacts: ContactRow[];
+  error?: string;
+};
+type PublicProfilePayload = {
+  profile: {
+    user_id: string;
+    username: string | null;
+    display_name: string | null;
+    avatar_url: string | null;
+    level: number;
+    bio: string | null;
+    created_at: string;
+  };
+  links: ProfileLinkRow[];
+  relation: { isSelf: boolean; isContact: boolean; isTeam: boolean; isFollower: boolean };
+  visibleBlocks: Record<string, boolean>;
+  error?: string;
+};
+type ProfileEditorState = {
+  bio: string;
+  linkLabel: string;
+  linkUrl: string;
+  linkVisibility: ProfileVisibility;
+  visibilitySettings: ProfileVisibilitySettings;
+};
 
 export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { activeTab: SocialTab; refreshNonce: number; onRefresh: () => Promise<void> }) {
   const { user, profile, core, loading, refreshing, error, locale, setLocale, t } = useUserContext();
@@ -60,6 +107,13 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<PayoutNotification[] | null>(null);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [socialProfile, setSocialProfile] = useState<SocialProfilePayload | null>(null);
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false);
+  const [profileEditor, setProfileEditor] = useState<ProfileEditorState>(() => createProfileEditorState(null));
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [publicProfile, setPublicProfile] = useState<PublicProfilePayload | null>(null);
+  const [publicProfileLoading, setPublicProfileLoading] = useState(false);
+  const [contactSavingId, setContactSavingId] = useState<string | null>(null);
 
   useEffect(() => {
     setSocialError(null);
@@ -73,6 +127,13 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
     setNotifications(null);
     setNotificationsOpen(false);
     setNotificationsLoading(false);
+    setSocialProfile(null);
+    setProfileEditorOpen(false);
+    setProfileEditor(createProfileEditorState(null));
+    setProfileSaving(false);
+    setPublicProfile(null);
+    setPublicProfileLoading(false);
+    setContactSavingId(null);
   }, [activeTab, user?.id]);
 
   const loadReferralLink = useCallback(async () => {
@@ -105,6 +166,26 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
     setTeamContext(payload);
   }, [user]);
 
+  const loadSocialProfile = useCallback(async () => {
+    if (!user) return;
+    const token = await getAccessToken();
+    const response = await fetch(`/api/social/profile?ts=${Date.now()}`, {
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Cache-Control": "no-cache"
+      }
+    });
+    const payload = (await response.json()) as SocialProfilePayload;
+    if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load social profile.");
+    setSocialProfile(payload);
+    setProfileEditor((current) => profileEditorOpen ? current : createProfileEditorState(payload));
+  }, [profileEditorOpen, user]);
+
+  const loadProfileTab = useCallback(async () => {
+    await Promise.all([loadReferralLink(), loadSocialProfile()]);
+  }, [loadReferralLink, loadSocialProfile]);
+
   useEffect(() => {
     if (!user) {
       setReferralLink(null);
@@ -120,13 +201,13 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
       return;
     }
 
-    const load = activeTab === "teams" ? loadTeamContext : loadReferralLink;
+    const load = activeTab === "teams" ? loadTeamContext : loadProfileTab;
     setSocialError(null);
     load().catch((loadError) => {
       console.warn("Social data load failed", loadError);
       setSocialError(loadError instanceof Error ? loadError.message : "Failed to load social data.");
     });
-  }, [activeTab, loadReferralLink, loadTeamContext, refreshNonce, user]);
+  }, [activeTab, loadProfileTab, loadTeamContext, refreshNonce, user]);
 
   const displayName = profile?.display_name ?? user?.email ?? t("profile.guest");
   const handle = profile?.username ? `@${profile.username}` : user?.email ?? t("profile.localMode");
@@ -151,6 +232,92 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
       return;
     }
     await copyReferralLink();
+  }
+
+  function openProfileEditor() {
+    setProfileEditor(createProfileEditorState(socialProfile));
+    setProfileEditorOpen(true);
+  }
+
+  async function saveProfileEditor() {
+    setProfileSaving(true);
+    setSocialError(null);
+    try {
+      const token = await getAccessToken();
+      const links = profileEditor.linkUrl.trim()
+        ? [{
+            label: profileEditor.linkLabel,
+            url: profileEditor.linkUrl,
+            visibility: profileEditor.linkVisibility
+          }]
+        : [];
+      const response = await fetch("/api/social/profile", {
+        method: "PUT",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          bio: profileEditor.bio,
+          visibilitySettings: profileEditor.visibilitySettings,
+          links
+        })
+      });
+      const payload = (await response.json()) as SocialProfilePayload;
+      if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to save profile.");
+      await loadSocialProfile();
+      setProfileEditorOpen(false);
+    } catch (saveError) {
+      console.warn("Social profile save failed", saveError);
+      setSocialError(saveError instanceof Error ? saveError.message : "Failed to save profile.");
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  async function openPublicProfile(userId: string) {
+    setPublicProfileLoading(true);
+    setSocialError(null);
+    try {
+      const token = await getAccessToken();
+      const response = await fetch(`/api/social/profile/${userId}?ts=${Date.now()}`, {
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Cache-Control": "no-cache"
+        }
+      });
+      const payload = (await response.json()) as PublicProfilePayload;
+      if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load profile.");
+      setPublicProfile(payload);
+    } catch (profileError) {
+      console.warn("Public profile load failed", profileError);
+      setSocialError(profileError instanceof Error ? profileError.message : "Failed to load profile.");
+    } finally {
+      setPublicProfileLoading(false);
+    }
+  }
+
+  async function removeManualContact(contactUserId: string) {
+    setContactSavingId(contactUserId);
+    setSocialError(null);
+    try {
+      const token = await getAccessToken();
+      const response = await fetch(`/api/social/contacts?contactUserId=${encodeURIComponent(contactUserId)}`, {
+        method: "DELETE",
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const payload = (await response.json()) as { contacts?: ContactRow[]; error?: string };
+      if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to remove contact.");
+      setSocialProfile((current) => current ? { ...current, contacts: payload.contacts ?? [] } : current);
+    } catch (contactError) {
+      console.warn("Contact remove failed", contactError);
+      setSocialError(contactError instanceof Error ? contactError.message : "Failed to remove contact.");
+    } finally {
+      setContactSavingId(null);
+    }
   }
 
   async function toggleTeamRewards() {
@@ -216,13 +383,29 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
             <>
               <div className="team-summary">
                 <span>{t("profile.teams.leader")}</span>
-                <strong>{formatLeader(teamContext, locale)}</strong>
+                {teamContext?.leader.type === "user" && teamContext.membership?.leader_user_id ? (
+                  <button className="inline-profile-button" type="button" onClick={() => { void openPublicProfile(teamContext.membership?.leader_user_id ?? ""); }}>
+                    {formatLeader(teamContext, locale)}
+                  </button>
+                ) : (
+                  <strong>{formatLeader(teamContext, locale)}</strong>
+                )}
                 <p>{teamContext?.membership ? t("profile.teams.assigned", { date: formatDate(teamContext.membership.assigned_at, locale) }) : t("profile.teams.pending")}</p>
               </div>
               <div className="team-summary">
                 <span>{t("profile.teams.members")}</span>
                 <strong>{teamContext?.directMembers.length ?? 0}</strong>
-                <p>{teamContext?.directMembers.length ? teamContext.directMembers.map((member) => formatProfileName(member.profile, member.userId)).join(", ") : t("profile.teams.emptyMembers")}</p>
+                {teamContext?.directMembers.length ? (
+                  <div className="compact-profile-list">
+                    {teamContext.directMembers.map((member) => (
+                      <button className="compact-profile-button" type="button" key={member.userId} onClick={() => { void openPublicProfile(member.userId); }}>
+                        {formatProfileName(member.profile, member.userId)}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p>{t("profile.teams.emptyMembers")}</p>
+                )}
               </div>
               <HistoryPanel
                 title={locale === "ru" ? "История лидерских бонусов" : "Team bonus history"}
@@ -280,6 +463,110 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
             <Languages size={16} />
             {t(nextLocale === "ru" ? "profile.language.ru" : "profile.language.en")}
           </button>
+          <section className="public-profile-box">
+            <div className="section-heading-row">
+              <span>{t("profile.public.title")}</span>
+              <button className="finance-small-icon-button" type="button" aria-label={t("profile.public.edit")} onClick={openProfileEditor}>
+                <Edit3 size={16} />
+              </button>
+            </div>
+            {profileEditorOpen ? (
+              <div className="profile-editor">
+                <label className="finance-field">
+                  <span>{t("profile.public.bio")}</span>
+                  <textarea value={profileEditor.bio} maxLength={700} onChange={(event) => setProfileEditor((current) => ({ ...current, bio: event.target.value }))} />
+                </label>
+                <div className="term-row">
+                  <label className="finance-field">
+                    <span>{t("profile.public.linkLabel")}</span>
+                    <input value={profileEditor.linkLabel} maxLength={40} onChange={(event) => setProfileEditor((current) => ({ ...current, linkLabel: event.target.value }))} />
+                  </label>
+                  <label className="finance-field">
+                    <span>{t("profile.public.linkUrl")}</span>
+                    <input value={profileEditor.linkUrl} maxLength={500} inputMode="url" onChange={(event) => setProfileEditor((current) => ({ ...current, linkUrl: event.target.value }))} />
+                  </label>
+                </div>
+                <label className="finance-field">
+                  <span>{t("profile.public.linkVisibility")}</span>
+                  <select value={profileEditor.linkVisibility} onChange={(event) => setProfileEditor((current) => ({ ...current, linkVisibility: event.target.value as ProfileVisibility }))}>
+                    {PROFILE_VISIBILITY_LEVELS.map((visibility) => (
+                      <option value={visibility} key={visibility}>{t(visibilityLabelKey(visibility))}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="visibility-grid">
+                  {PROFILE_VISIBILITY_KEYS.map((key) => (
+                    <label className="finance-field" key={key}>
+                      <span>{t(profileVisibilityKeyLabel(key))}</span>
+                      <select
+                        value={profileEditor.visibilitySettings[key]}
+                        onChange={(event) => setProfileEditor((current) => ({
+                          ...current,
+                          visibilitySettings: {
+                            ...current.visibilitySettings,
+                            [key]: event.target.value as ProfileVisibility
+                          }
+                        }))}
+                      >
+                        {PROFILE_VISIBILITY_LEVELS.map((visibility) => (
+                          <option value={visibility} key={visibility}>{t(visibilityLabelKey(visibility))}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                <div className="referral-actions">
+                  <button className="secondary-button" type="button" disabled={profileSaving} onClick={saveProfileEditor}>
+                    <Save size={16} />
+                    {t("app.common.done")}
+                  </button>
+                  <button className="secondary-button" type="button" disabled={profileSaving} onClick={() => setProfileEditorOpen(false)}>
+                    <X size={16} />
+                    {t("app.common.cancel")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {socialProfile?.profile?.bio ? <p>{socialProfile.profile.bio}</p> : <p>{t("profile.public.emptyBio")}</p>}
+                {socialProfile?.links.length ? (
+                  <div className="profile-links">
+                    {socialProfile.links.map((item) => (
+                      <a href={item.url} target="_blank" rel="noreferrer" key={item.id}>
+                        <ExternalLink size={15} />
+                        {item.label ?? readableHost(item.url)}
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            )}
+          </section>
+          <section className="public-profile-box">
+            <div className="section-heading-row">
+              <span>{t("profile.contacts.title")}</span>
+              <strong>{socialProfile?.contacts.length ?? 0}</strong>
+            </div>
+            {socialProfile?.contacts.length ? (
+              <div className="contact-list">
+                {socialProfile.contacts.map((contact) => (
+                  <article className="contact-row" key={`${contact.contact_user_id}-${contact.source}`}>
+                    <button type="button" onClick={() => { void openPublicProfile(contact.contact_user_id); }}>
+                      <span>{formatProfileName(contact.profile, contact.contact_user_id)}</span>
+                      <small>{t(contactSourceLabelKey(contact.source))}</small>
+                    </button>
+                    {contact.source === "manual" && !contact.is_required ? (
+                      <button className="finance-small-icon-button" type="button" disabled={contactSavingId === contact.contact_user_id} aria-label={t("profile.contacts.remove")} onClick={() => { void removeManualContact(contact.contact_user_id); }}>
+                        <Trash2 size={15} />
+                      </button>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p>{t("profile.contacts.empty")}</p>
+            )}
+          </section>
           <div className="profile-notifications">
             <button className="finance-icon-button" type="button" aria-label={locale === "ru" ? "Уведомления" : "Notifications"} onClick={openPayoutNotifications}>
               <Bell size={18} />
@@ -317,6 +604,36 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
       ) : null}
 
       {combinedError ? <p className="finance-error">{combinedError}</p> : null}
+      {publicProfileLoading ? <p className="finance-error neutral">{t("app.common.loading")}</p> : null}
+      {publicProfile ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setPublicProfile(null)}>
+          <section className="modal-sheet public-profile-modal" role="dialog" aria-modal="true" aria-label={t("profile.public.title")} onClick={(event) => event.stopPropagation()}>
+            <button className="modal-close" type="button" aria-label={t("app.common.close")} onClick={() => setPublicProfile(null)}>
+              <X size={18} />
+            </button>
+            <div className="profile-avatar">
+              {publicProfile.profile.avatar_url ? <img alt="" src={publicProfile.profile.avatar_url} /> : <UserRound size={34} />}
+            </div>
+            <strong>{formatProfileName(publicProfile.profile, publicProfile.profile.user_id)}</strong>
+            <div className="profile-facts">
+              <span>Lvl {publicProfile.profile.level}</span>
+              {publicProfile.relation.isTeam ? <span>{t("profile.visibility.team")}</span> : null}
+              {publicProfile.relation.isContact ? <span>{t("profile.visibility.contacts")}</span> : null}
+            </div>
+            {publicProfile.profile.bio ? <p>{publicProfile.profile.bio}</p> : null}
+            {publicProfile.links.length ? (
+              <div className="profile-links">
+                {publicProfile.links.map((item) => (
+                  <a href={item.url} target="_blank" rel="noreferrer" key={item.id}>
+                    <ExternalLink size={15} />
+                    {item.label ?? readableHost(item.url)}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -445,4 +762,37 @@ function formatLeader(teamContext: TeamContext | null, locale: AppLocale): strin
 
 function formatProfileName(profile: TeamProfile | null, fallback: string): string {
   return profile?.display_name ?? (profile?.username ? `@${profile.username}` : fallback.slice(0, 8));
+}
+
+function createProfileEditorState(payload: SocialProfilePayload | null): ProfileEditorState {
+  const firstLink = payload?.links[0];
+  return {
+    bio: payload?.profile?.bio ?? "",
+    linkLabel: firstLink?.label ?? "",
+    linkUrl: firstLink?.url ?? "",
+    linkVisibility: (firstLink?.visibility as ProfileVisibility | undefined) ?? "public",
+    visibilitySettings: payload?.visibilitySettings ?? { ...DEFAULT_PROFILE_VISIBILITY_SETTINGS }
+  };
+}
+
+function visibilityLabelKey(visibility: ProfileVisibility): MessageKey {
+  return `profile.visibility.${visibility}` as MessageKey;
+}
+
+function profileVisibilityKeyLabel(key: ProfileVisibilityKey): MessageKey {
+  return `profile.visibilityBlock.${key}` as MessageKey;
+}
+
+function contactSourceLabelKey(source: string): MessageKey {
+  if (source === "team_leader") return "profile.contacts.sourceLeader";
+  if (source === "team_member") return "profile.contacts.sourceMember";
+  return "profile.contacts.sourceManual";
+}
+
+function readableHost(value: string): string {
+  try {
+    return new URL(value).hostname.replace(/^www\./, "");
+  } catch {
+    return value;
+  }
 }
