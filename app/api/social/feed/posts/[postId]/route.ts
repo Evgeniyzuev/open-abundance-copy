@@ -82,10 +82,54 @@ export async function PATCH(request: NextRequest, { params }: { params: { postId
 
     if (statBlocksError) return NextResponse.json({ error: statBlocksError.message }, { status: 500, headers: NO_STORE_HEADERS });
 
-    return NextResponse.json({ post: { ...updatedPost, statBlocks: statBlocks ?? [] } }, { headers: NO_STORE_HEADERS });
+    return NextResponse.json(
+      { post: { ...updatedPost, statBlocks: filterStatBlocksForPost(updatedPost as FeedPostRow, statBlocks ?? []) } },
+      { headers: NO_STORE_HEADERS }
+    );
   } catch (routeError) {
     return NextResponse.json(
       { error: routeError instanceof Error ? routeError.message : "Failed to update feed post." },
+      { status: 500, headers: NO_STORE_HEADERS }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: { postId: string } }) {
+  try {
+    const postId = normalizeUuid(params.postId);
+    if (!postId) {
+      return NextResponse.json({ error: "Invalid post id." }, { status: 400, headers: NO_STORE_HEADERS });
+    }
+
+    const { supabase, user, error } = await getAuthenticatedUser(request);
+    if (error || !user) {
+      return NextResponse.json({ error }, { status: 401, headers: NO_STORE_HEADERS });
+    }
+
+    const { data: currentPost, error: currentPostError } = await supabase
+      .from("feed_posts")
+      .select("*")
+      .eq("id", postId)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (currentPostError) return NextResponse.json({ error: currentPostError.message }, { status: 500, headers: NO_STORE_HEADERS });
+    if (!currentPost) return NextResponse.json({ error: "Post not found." }, { status: 404, headers: NO_STORE_HEADERS });
+    if (currentPost.author_user_id !== user.id) {
+      return NextResponse.json({ error: "Only the author can delete this post." }, { status: 403, headers: NO_STORE_HEADERS });
+    }
+
+    const { error: deleteError } = await supabase
+      .from("feed_posts")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", postId);
+
+    if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500, headers: NO_STORE_HEADERS });
+
+    return NextResponse.json({ deletedPostId: postId }, { headers: NO_STORE_HEADERS });
+  } catch (routeError) {
+    return NextResponse.json(
+      { error: routeError instanceof Error ? routeError.message : "Failed to delete feed post." },
       { status: 500, headers: NO_STORE_HEADERS }
     );
   }
@@ -132,6 +176,11 @@ function normalizeStatBlockUpdates(value: unknown): Array<{ blockKey: string; vi
       };
     })
     .filter((item): item is { blockKey: string; visibility: "public" | "private" } => Boolean(item));
+}
+
+function filterStatBlocksForPost(post: FeedPostRow, statBlocks: Tables<"feed_post_stat_blocks">[]): Tables<"feed_post_stat_blocks">[] {
+  if (post.status !== "published") return statBlocks;
+  return statBlocks.filter((block) => block.visibility === "public");
 }
 
 function normalizeUuid(value: unknown): string | null {

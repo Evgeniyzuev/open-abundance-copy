@@ -525,6 +525,31 @@ export default function SocialApp({
     }
   }
 
+  async function deletePost(post: FeedPost) {
+    if (!window.confirm(t("social.post.deleteConfirm", { title: post.body ?? t("social.post.detail") }))) return;
+
+    setFeedSaving(true);
+    setSocialError(null);
+    try {
+      const token = await getAccessToken();
+      const response = await fetch(`/api/social/feed/posts/${post.id}`, {
+        method: "DELETE",
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const payload = (await response.json()) as { deletedPostId?: string; error?: string };
+      if (!response.ok || payload.error || !payload.deletedPostId) throw new Error(payload.error ?? "Failed to delete post.");
+      setDailyDraft((current) => current?.id === post.id ? null : current);
+      setSelectedPost((current) => current?.id === post.id ? null : current);
+      await Promise.all([loadFeed(), loadBlog()]);
+    } catch (deleteError) {
+      console.warn("Feed post delete failed", deleteError);
+      setSocialError(deleteError instanceof Error ? deleteError.message : "Failed to delete post.");
+    } finally {
+      setFeedSaving(false);
+    }
+  }
+
   function updateDailyDraftBody(body: string) {
     setDailyDraft((current) => current ? { ...current, body } : current);
   }
@@ -597,6 +622,7 @@ export default function SocialApp({
 
       {activeTab === "feed" && user ? (
         <FeedView
+          currentUserId={user.id}
           dailyDraft={dailyDraft}
           externalLinkUrl={externalLinkUrl}
           feedPayload={feedPayload}
@@ -611,6 +637,7 @@ export default function SocialApp({
           onOpenAuthor={openPublicProfile}
           onOpenBlog={openAuthorBlog}
           onOpenPost={setSelectedPost}
+          onDeletePost={deletePost}
           onPublish={publishPost}
           onToggleDraftBlock={toggleDailyDraftBlock}
         />
@@ -638,6 +665,7 @@ export default function SocialApp({
           onOpenAuthor={openPublicProfile}
           onOpenOwnBlog={() => setSelectedBlogAuthorId(null)}
           onOpenPost={setSelectedPost}
+          onDeletePost={deletePost}
           onPublish={publishPost}
         />
       ) : null}
@@ -906,10 +934,12 @@ export default function SocialApp({
       ) : null}
       {selectedPost ? (
         <PostDetailModal
+          currentUserId={user?.id ?? null}
           locale={locale}
           post={selectedPost}
           t={t}
           onClose={() => setSelectedPost(null)}
+          onDeletePost={deletePost}
           onOpenAuthor={openPublicProfile}
           onOpenBlog={openAuthorBlog}
         />
@@ -919,6 +949,7 @@ export default function SocialApp({
 }
 
 function FeedView({
+  currentUserId,
   dailyDraft,
   externalLinkUrl,
   feedPayload,
@@ -933,9 +964,11 @@ function FeedView({
   onOpenAuthor,
   onOpenBlog,
   onOpenPost,
+  onDeletePost,
   onPublish,
   onToggleDraftBlock
 }: {
+  currentUserId: string;
   dailyDraft: FeedPost | null;
   externalLinkUrl: string;
   feedPayload: FeedPayload | null;
@@ -950,6 +983,7 @@ function FeedView({
   onOpenAuthor: (userId: string) => void;
   onOpenBlog: (userId: string) => void;
   onOpenPost: (post: FeedPost) => void;
+  onDeletePost: (post: FeedPost) => void;
   onPublish: (post: FeedPost) => void;
   onToggleDraftBlock: (blockKey: string) => void;
 }) {
@@ -985,6 +1019,7 @@ function FeedView({
         />
       </section>
       <PostList
+        currentUserId={currentUserId}
         emptyText={t("social.feed.empty")}
         loading={loading}
         locale={locale}
@@ -994,6 +1029,7 @@ function FeedView({
         onOpenAuthor={onOpenAuthor}
         onOpenBlog={onOpenBlog}
         onOpenPost={onOpenPost}
+        onDeletePost={onDeletePost}
         onPublish={onPublish}
       />
     </section>
@@ -1045,6 +1081,7 @@ function BlogView({
   onOpenAuthor,
   onOpenOwnBlog,
   onOpenPost,
+  onDeletePost,
   onPublish
 }: {
   blogPayload: FeedPayload | null;
@@ -1057,6 +1094,7 @@ function BlogView({
   onOpenAuthor: (userId: string) => void;
   onOpenOwnBlog: () => void;
   onOpenPost: (post: FeedPost) => void;
+  onDeletePost: (post: FeedPost) => void;
   onPublish: (post: FeedPost) => void;
 }) {
   const posts = blogPayload?.posts ?? [];
@@ -1078,6 +1116,7 @@ function BlogView({
         ) : null}
       </section>
       <PostList
+        currentUserId={currentUserId}
         emptyText={t("social.blog.empty")}
         loading={loading}
         locale={locale}
@@ -1088,6 +1127,7 @@ function BlogView({
         onOpenAuthor={onOpenAuthor}
         onOpenBlog={onOpenAuthor}
         onOpenPost={onOpenPost}
+        onDeletePost={onDeletePost}
         onPublish={onPublish}
       />
     </section>
@@ -1149,6 +1189,7 @@ function DailyDraftEditor({
 }
 
 function PostList({
+  currentUserId,
   emptyText,
   loading,
   locale,
@@ -1159,8 +1200,10 @@ function PostList({
   onOpenAuthor,
   onOpenBlog,
   onOpenPost,
+  onDeletePost,
   onPublish
 }: {
+  currentUserId: string;
   emptyText: string;
   loading: boolean;
   locale: AppLocale;
@@ -1171,6 +1214,7 @@ function PostList({
   onOpenAuthor: (userId: string) => void;
   onOpenBlog: (userId: string) => void;
   onOpenPost: (post: FeedPost) => void;
+  onDeletePost: (post: FeedPost) => void;
   onPublish: (post: FeedPost) => void;
 }) {
   if (loading) return <p className="finance-error neutral">{t("app.common.loading")}</p>;
@@ -1180,6 +1224,7 @@ function PostList({
     <div className="feed-post-list">
       {posts.map((post) => (
         <PostCard
+          currentUserId={currentUserId}
           key={post.id}
           locale={locale}
           post={post}
@@ -1189,6 +1234,7 @@ function PostList({
           onOpenAuthor={onOpenAuthor}
           onOpenBlog={onOpenBlog}
           onOpenPost={onOpenPost}
+          onDeletePost={onDeletePost}
           onPublish={onPublish}
         />
       ))}
@@ -1197,6 +1243,7 @@ function PostList({
 }
 
 function PostCard({
+  currentUserId,
   locale,
   post,
   saving,
@@ -1205,8 +1252,10 @@ function PostCard({
   onOpenAuthor,
   onOpenBlog,
   onOpenPost,
+  onDeletePost,
   onPublish
 }: {
+  currentUserId: string;
   locale: AppLocale;
   post: FeedPost;
   saving: boolean;
@@ -1215,8 +1264,11 @@ function PostCard({
   onOpenAuthor: (userId: string) => void;
   onOpenBlog: (userId: string) => void;
   onOpenPost: (post: FeedPost) => void;
+  onDeletePost: (post: FeedPost) => void;
   onPublish: (post: FeedPost) => void;
 }) {
+  const canDelete = post.author_user_id === currentUserId;
+
   return (
     <article className="feed-post-card">
       <header>
@@ -1246,6 +1298,11 @@ function PostCard({
               <Send size={15} />
             </button>
           ) : null}
+          {canDelete ? (
+            <button className="finance-small-icon-button danger" type="button" disabled={saving} aria-label={t("social.post.delete")} onClick={() => onDeletePost(post)}>
+              <Trash2 size={15} />
+            </button>
+          ) : null}
         </div>
       </footer>
     </article>
@@ -1253,20 +1310,26 @@ function PostCard({
 }
 
 function PostDetailModal({
+  currentUserId,
   locale,
   post,
   t,
   onClose,
+  onDeletePost,
   onOpenAuthor,
   onOpenBlog
 }: {
+  currentUserId: string | null;
   locale: AppLocale;
   post: FeedPost;
   t: (key: MessageKey, values?: Record<string, string | number>) => string;
   onClose: () => void;
+  onDeletePost: (post: FeedPost) => void;
   onOpenAuthor: (userId: string) => void;
   onOpenBlog: (userId: string) => void;
 }) {
+  const canDelete = post.author_user_id === currentUserId;
+
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <section className="modal-sheet post-detail-modal" role="dialog" aria-modal="true" aria-label={t("social.post.detail")} onClick={(event) => event.stopPropagation()}>
@@ -1283,10 +1346,17 @@ function PostDetailModal({
         <span className={`post-status ${post.status}`}>{t(postStatusLabelKey(post.status))} - {formatPostDate(post, locale)}</span>
         <StatBlockGrid blocks={post.statBlocks} locale={locale} t={t} />
         <ExternalLinkPreview post={post} />
-        <button className="secondary-button" type="button" onClick={() => onOpenBlog(post.author_user_id)}>
-          <BookOpen size={16} />
-          {t("social.feed.openBlog")}
-        </button>
+        <div className="post-detail-actions">
+          <button className="secondary-button" type="button" onClick={() => onOpenBlog(post.author_user_id)}>
+            <BookOpen size={16} />
+            {t("social.feed.openBlog")}
+          </button>
+          {canDelete ? (
+            <button className="finance-small-icon-button danger" type="button" aria-label={t("social.post.delete")} onClick={() => onDeletePost(post)}>
+              <Trash2 size={15} />
+            </button>
+          ) : null}
+        </div>
       </section>
     </div>
   );

@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
         posts: postRows.map((post) => ({
           ...post,
           author: profiles.find((item) => item.user_id === post.author_user_id) ?? null,
-          statBlocks: statBlocks.filter((block) => block.post_id === post.id),
+          statBlocks: filterStatBlocksForViewer(post, statBlocks, user.id),
           externalLinks: externalLinks.filter((link) => link.post_id === post.id)
         }))
       },
@@ -370,6 +370,12 @@ function removeTrackingParams(url: URL) {
 function buildExternalPostBody(link: NormalizedExternalLink): string {
   const handle = link.authorHandle ? ` ${link.authorHandle}` : "";
   return `${link.title}${handle}`;
+}
+
+function filterStatBlocksForViewer(post: FeedPostRow, statBlocks: FeedStatBlockRow[], viewerUserId: string): FeedStatBlockRow[] {
+  const postBlocks = statBlocks.filter((block) => block.post_id === post.id);
+  if (post.status !== "published" && post.author_user_id === viewerUserId) return postBlocks;
+  return postBlocks.filter((block) => block.visibility === "public");
 }
 
 function clampLimit(value: string | null): number {

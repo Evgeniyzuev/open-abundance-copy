@@ -919,6 +919,8 @@ Implemented 2026-06-07:
 - видимость отдельных daily post блоков настраивается в daily draft composer перед публикацией; это единая точка выбора, какие snapshot-блоки попадут в общий feed и публичный blog view.
 - добавлен inbound composer/API для внешней ссылки: paste URL -> normalize provider/id/handle -> создать `feed_posts.post_type = external_link` и строку `feed_post_external_links.relation = 'source'`;
 - public feed/blog возвращают `externalLinks` вместе с постом и показывают link-only preview без iframe и без загрузки внешнего media в Supabase Storage.
+- опубликованный пост имеет одинаковый публичный вид в feed, blog и detail: после `status = published` UI/API показывают только публичные блоки, даже если viewer является автором;
+- автор может удалить свой пост через soft-delete `feed_posts.deleted_at`; пост исчезает из общего feed, blog и detail, а связанные snapshot/link rows остаются для истории и отладки.
 
 Pending:
 
