@@ -237,7 +237,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
         {showChecks ? <TasksApp /> : null}
         {showChallenges ? <ChallengesApp refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("challenges")} /> : null}
         {showWallet ? <WalletApp activeTab={activeWalletTab} refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("wallet")} /> : null}
-        {showPeople ? <SocialApp activeTab={activeSocialTab} refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("social")} onTabChange={setActiveSocialTab} /> : null}
+        {showPeople ? <SocialApp activeTab={activeSocialTab} refreshNonce={refreshNonce} onTabChange={setActiveSocialTab} /> : null}
         {!showNotes && !showWishes && !showChecks && !showChallenges && !showWallet && !showPeople ? <PlaceholderScreen title={currentTitle} /> : null}
       </section>
       <BottomTabBar activeTab={activeMainTab} hidden={navHidden} t={t} onTabChange={setActiveMainTab} />

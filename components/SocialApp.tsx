@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BookOpen, ChevronDown, ChevronUp, Copy, Edit3, ExternalLink, Languages, Link, Newspaper, RefreshCw, Save, Send, Share2, Trash2, UserRound, Users, X } from "lucide-react";
+import { Bell, BookOpen, ChevronDown, ChevronUp, Copy, Edit3, ExternalLink, Languages, Link, Newspaper, Save, Send, Share2, Trash2, UserRound, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useUserContext } from "@/components/UserProvider";
@@ -129,15 +129,13 @@ type ProfileEditorState = {
 export default function SocialApp({
   activeTab,
   refreshNonce,
-  onRefresh,
   onTabChange
 }: {
   activeTab: SocialTab;
   refreshNonce: number;
-  onRefresh: () => Promise<void>;
   onTabChange: SocialTabChange;
 }) {
-  const { user, profile, core, loading, refreshing, error, locale, setLocale, t } = useUserContext();
+  const { user, profile, core, loading, error, locale, setLocale, t } = useUserContext();
   const [referralLink, setReferralLink] = useState<ReferralLink | null>(null);
   const [teamContext, setTeamContext] = useState<TeamContext | null>(null);
   const [socialError, setSocialError] = useState<string | null>(null);
@@ -540,16 +538,6 @@ export default function SocialApp({
 
   return (
     <section className="social-screen">
-      <header className="social-header">
-        <div>
-          <span>Social</span>
-          <h1>{t("profile.title")}</h1>
-        </div>
-        <button className="finance-icon-button" type="button" aria-label={t("app.common.refresh")} disabled={refreshing} onClick={() => { void onRefresh(); }}>
-          <RefreshCw size={19} className={refreshing ? "spin" : ""} />
-        </button>
-      </header>
-
       {activeTab === "feed" && !user && !loading ? (
         <section className="profile-panel">
           <div className="profile-avatar placeholder">
