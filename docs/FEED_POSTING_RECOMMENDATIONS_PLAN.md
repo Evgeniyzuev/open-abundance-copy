@@ -880,10 +880,18 @@ Implemented 2026-06-05:
 - в Social UI добавлены вкладки `feed` и `blog`: daily draft composer, публикация public-поста, общий feed, личный blog и modal detail поста;
 - public feed показывает только `published + public + deleted_at is null`, а личный blog владельца показывает его drafts/published/archived.
 
+Implemented 2026-06-07:
+
+- добавлен `feed_posts.post_type = external_link` для lightweight external social posts;
+- добавлена таблица `feed_post_external_links` с provider, external URL/id, optional metadata, embed status и relation `source|mirror`;
+- для `feed_post_external_links` добавлены индексы, grants, RLS policies и updated_at trigger;
+- внешние соцсети на уровне схемы поддерживаются без загрузки внешних фото/видео в Supabase Storage.
+
 Pending:
 
+- inbound composer для внешних ссылок, provider detection, external social link cards и lazy embeds;
+- outbound share package для daily progress/achievement posts и сохранение external mirrors;
 - `feed_post_media`, ручные текстовые посты, реакции, комментарии, сохранения и grid/list режим blog;
-- external social link cards, lazy embeds и outbound share package для daily progress/achievement posts;
 - visibility-фильтрация реальных желаний, достижений, доходов, расходов и постов после появления этих социальных сущностей;
 - отдельные публичные profile URLs вне текущего Social modal.
 
