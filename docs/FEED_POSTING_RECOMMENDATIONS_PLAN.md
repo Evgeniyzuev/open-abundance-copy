@@ -350,8 +350,18 @@ Reference points:
 - автор;
 - ссылка на аккаунт/профиль автора;
 - уникальный id/handle автора;
-- уровень автора;
+- уровень автора и визуальная отметка, если за день был level up;
 - период отчета.
+- общий доход в Core за завершенный день;
+- сила личной команды: сумма уровней прямых участников, у которых автор является лидом.
+
+Daily progress post должен строиться только по полностью завершенному системному дню. День считается завершенным, когда прошел daily job `run_daily_core_and_team_bonus`: начислены проценты от Core и рассчитаны командные бонусы. Для текущего MVP "общий доход в Core" считается как:
+
+```text
+total_core_growth = daily_core_accruals.core_amount + sum(team_core_growth_rewards.reward_amount where leader_user_id = author and bonus_date = accrual_date)
+```
+
+`daily_rate` и `reinvest_percent` не являются ростом за день, поэтому они не входят в публичный daily growth post. Доход от заданий/challenges и ручные пополнения Core должны войти в `total_core_growth` позже, когда для них появится отдельный daily ledger/audit source; сейчас эти источники нельзя надежно восстановить из существующих таблиц без риска двойного счета.
 
 Опциональные блоки daily progress:
 
@@ -372,6 +382,18 @@ Reference points:
 - выполненные челленджи;
 - пользовательский комментарий/рефлексия;
 - прикрепленные изображения автора.
+
+### Ежедневные автопубликации
+
+Daily progress post остается базовым системным автопостом. После стабилизации daily growth нужно добавить отдельные daily draft sources, которые пользователь сможет включать или скрывать перед публикацией:
+
+- новые публичные желания за завершенный день;
+- исполненные публичные желания за завершенный день;
+- расходы внутри системы за завершенный день.
+
+Эти источники должны попадать в автопост только как агрегированные публичные snapshot-блоки. Сырые wish/expense записи не должны раскрываться в feed API без проверки visibility владельца и прав viewer. Для расходов по умолчанию нужен explicit opt-in, потому что это чувствительный финансовый блок.
+
+Daily draft composer должен быть единым местом настройки видимости отдельных блоков перед публикацией: `public` блоки попадают и в общий feed, и в личный blog автора; `private` блоки остаются скрытыми для чужого viewer.
 
 ### Подтвержденность
 
@@ -578,10 +600,14 @@ create table public.feed_post_stat_blocks (
   id uuid primary key default gen_random_uuid(),
   post_id uuid not null references public.feed_posts(id) on delete cascade,
   snapshot_id uuid not null references public.progress_snapshots(id) on delete restrict,
-  stat_key text not null,
-  is_visible boolean not null default true,
+  block_key text not null check (block_key in ('level', 'total_core_growth', 'team_strength', 'core_growth', 'wallet_income', 'daily_rate', 'reinvest')),
+  label text not null,
+  value jsonb not null default '{}'::jsonb,
+  visibility text not null default 'private' check (visibility in ('public', 'followers', 'team', 'contacts', 'private')),
   sort_order integer not null default 0,
-  unique (post_id, stat_key)
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (post_id, block_key)
 );
 
 create table public.feed_reactions (
@@ -886,11 +912,18 @@ Implemented 2026-06-07:
 - добавлена таблица `feed_post_external_links` с provider, external URL/id, optional metadata, embed status и relation `source|mirror`;
 - для `feed_post_external_links` добавлены индексы, grants, RLS policies и updated_at trigger;
 - внешние соцсети на уровне схемы поддерживаются без загрузки внешних фото/видео в Supabase Storage.
+- daily draft title/body обновлен с системного `Daily Core progress for YYYY-MM-DD` на `My Growth: DD Month`;
+- daily growth stat blocks обновлены: `level`, `total_core_growth`, `team_strength`; `daily_rate` и `reinvest` больше не создаются для новых/пересинхронизированных daily drafts;
+- `total_core_growth` сейчас включает daily Core reinvest amount и командный бонус автора за этот день; challenge/task rewards и ручные пополнения Core остаются pending до отдельного ledger source;
+- stat blocks для daily growth создаются публичными по умолчанию, поэтому public feed показывает полный growth post, а private-блоки по-прежнему не раскрываются чужому viewer.
+- видимость отдельных daily post блоков настраивается в daily draft composer перед публикацией; это единая точка выбора, какие snapshot-блоки попадут в общий feed и публичный blog view.
 
 Pending:
 
 - inbound composer для внешних ссылок, provider detection, external social link cards и lazy embeds;
 - outbound share package для daily progress/achievement posts и сохранение external mirrors;
+- daily ledger/audit source для challenge/task rewards и ручных пополнений Core, чтобы включать их в `total_core_growth` без риска двойного счета;
+- daily draft sources для новых публичных желаний, исполненных публичных желаний и расходов внутри системы;
 - `feed_post_media`, ручные текстовые посты, реакции, комментарии, сохранения и grid/list режим blog;
 - visibility-фильтрация реальных желаний, достижений, доходов, расходов и постов после появления этих социальных сущностей;
 - отдельные публичные profile URLs вне текущего Social modal.

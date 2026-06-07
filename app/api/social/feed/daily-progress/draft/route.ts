@@ -13,6 +13,13 @@ type DailyCoreAccrual = Pick<
 >;
 type FeedPostRow = Tables<"feed_posts">;
 type FeedStatBlockRow = Tables<"feed_post_stat_blocks">;
+type DailyGrowthContext = {
+  levelBefore: number;
+  levelAfter: number;
+  teamBonusAmount: number;
+  teamStrength: number;
+  teamMemberCount: number;
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,13 +48,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Daily Core accrual was not found." }, { status: 404, headers: NO_STORE_HEADERS });
     }
 
-    const snapshot = await upsertSnapshot(user.id, accrual as DailyCoreAccrual);
-    const post = await getOrCreatePost(user.id, snapshot.id, accrual as DailyCoreAccrual);
-    const statBlocks = await getOrCreateStatBlocks(post, snapshot.id, accrual as DailyCoreAccrual);
+    const row = accrual as DailyCoreAccrual;
+    const context = await loadDailyGrowthContext(user.id, row);
+    const snapshot = await upsertSnapshot(user.id, row, context);
+    const post = await getOrCreatePost(user.id, snapshot.id, row);
+    const statBlocks = await syncStatBlocks(post, snapshot.id, row, context);
 
     return NextResponse.json({ post: { ...post, statBlocks } }, { headers: NO_STORE_HEADERS });
 
-    async function upsertSnapshot(userId: string, row: DailyCoreAccrual): Promise<Tables<"progress_snapshots">> {
+    async function upsertSnapshot(userId: string, row: DailyCoreAccrual, context: DailyGrowthContext): Promise<Tables<"progress_snapshots">> {
       const { data, error: snapshotError } = await supabase
         .from("progress_snapshots")
         .upsert(
@@ -62,7 +71,7 @@ export async function POST(request: NextRequest) {
             core_amount: row.core_amount,
             wallet_amount: row.wallet_amount,
             core_after: row.core_after,
-            payload: buildSnapshotPayload(row)
+            payload: buildSnapshotPayload(row, context)
           },
           { onConflict: "user_id,source_type,source_date" }
         )
@@ -83,7 +92,22 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (existingError) throw existingError;
-      if (existingPost) return existingPost;
+      if (existingPost) {
+        const nextBody = shouldRefreshDefaultBody(existingPost.body) ? buildDefaultBody(row) : existingPost.body;
+        if (nextBody !== existingPost.body) {
+          const { data: updatedPost, error: updatePostError } = await supabase
+            .from("feed_posts")
+            .update({ body: nextBody })
+            .eq("id", existingPost.id)
+            .select("*")
+            .single();
+
+          if (updatePostError) throw updatePostError;
+          return updatedPost;
+        }
+
+        return existingPost;
+      }
 
       const { data, error: insertError } = await supabase
         .from("feed_posts")
@@ -102,7 +126,7 @@ export async function POST(request: NextRequest) {
       return data;
     }
 
-    async function getOrCreateStatBlocks(post: FeedPostRow, snapshotId: string, row: DailyCoreAccrual): Promise<FeedStatBlockRow[]> {
+    async function syncStatBlocks(post: FeedPostRow, snapshotId: string, row: DailyCoreAccrual, context: DailyGrowthContext): Promise<FeedStatBlockRow[]> {
       const { data: existingBlocks, error: existingBlocksError } = await supabase
         .from("feed_post_stat_blocks")
         .select("*")
@@ -110,17 +134,92 @@ export async function POST(request: NextRequest) {
         .order("sort_order", { ascending: true });
 
       if (existingBlocksError) throw existingBlocksError;
-      if (existingBlocks?.length) return existingBlocks;
 
-      const blocks = buildStatBlocks(post.id, snapshotId, row);
-      const { data, error: insertBlocksError } = await supabase
+      const blocks = buildStatBlocks(post.id, snapshotId, row, context);
+      const desiredKeys = blocks.map((block) => block.block_key);
+      const obsoleteBlockIds = (existingBlocks ?? [])
+        .filter((block) => !desiredKeys.includes(block.block_key))
+        .map((block) => block.id);
+
+      if (obsoleteBlockIds.length) {
+        const { error: deleteObsoleteError } = await supabase
+          .from("feed_post_stat_blocks")
+          .delete()
+          .in("id", obsoleteBlockIds);
+
+        if (deleteObsoleteError) throw deleteObsoleteError;
+      }
+
+      const { data, error: upsertBlocksError } = await supabase
         .from("feed_post_stat_blocks")
-        .insert(blocks)
+        .upsert(blocks, { onConflict: "post_id,block_key" })
         .select("*")
         .order("sort_order", { ascending: true });
 
-      if (insertBlocksError) throw insertBlocksError;
+      if (upsertBlocksError) throw upsertBlocksError;
       return data ?? [];
+    }
+
+    async function loadDailyGrowthContext(userId: string, row: DailyCoreAccrual): Promise<DailyGrowthContext> {
+      const [teamBonusAmount, teamStrength] = await Promise.all([
+        loadTeamBonusAmount(userId, row.accrual_date),
+        loadTeamStrength(userId)
+      ]);
+      const totalCoreAfter = Number(row.core_after) + teamBonusAmount;
+      const [levelBefore, levelAfter] = await Promise.all([
+        calculateCoreLevel(Number(row.core_before)),
+        calculateCoreLevel(totalCoreAfter)
+      ]);
+
+      return {
+        levelBefore,
+        levelAfter,
+        teamBonusAmount,
+        teamStrength: teamStrength.levelSum,
+        teamMemberCount: teamStrength.memberCount
+      };
+    }
+
+    async function loadTeamBonusAmount(userId: string, date: string): Promise<number> {
+      const { data, error: rewardsError } = await supabase
+        .from("team_core_growth_rewards")
+        .select("reward_amount")
+        .eq("leader_user_id", userId)
+        .eq("bonus_date", date);
+
+      if (rewardsError) throw rewardsError;
+      return (data ?? []).reduce((sum, row) => sum + Number(row.reward_amount), 0);
+    }
+
+    async function loadTeamStrength(userId: string): Promise<{ levelSum: number; memberCount: number }> {
+      const { data: memberships, error: membershipsError } = await supabase
+        .from("team_memberships")
+        .select("member_user_id")
+        .eq("leader_user_id", userId)
+        .eq("is_active", true);
+
+      if (membershipsError) throw membershipsError;
+
+      const memberIds = (memberships ?? []).map((membership) => membership.member_user_id);
+      if (!memberIds.length) return { levelSum: 0, memberCount: 0 };
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from("user_profiles")
+        .select("level")
+        .in("user_id", memberIds);
+
+      if (profilesError) throw profilesError;
+
+      return {
+        levelSum: (profiles ?? []).reduce((sum, profile) => sum + Number(profile.level ?? 0), 0),
+        memberCount: memberIds.length
+      };
+    }
+
+    async function calculateCoreLevel(balance: number): Promise<number> {
+      const { data, error: levelError } = await supabase.rpc("calculate_core_level", { core_balance: balance });
+      if (levelError) throw levelError;
+      return Number(data ?? 0);
     }
   } catch (routeError) {
     return NextResponse.json(
@@ -130,57 +229,79 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function buildStatBlocks(postId: string, snapshotId: string, row: DailyCoreAccrual): Array<TablesInsert<"feed_post_stat_blocks">> {
+function buildStatBlocks(postId: string, snapshotId: string, row: DailyCoreAccrual, context: DailyGrowthContext): Array<TablesInsert<"feed_post_stat_blocks">> {
+  const totalCoreGrowth = Number(row.core_amount) + context.teamBonusAmount;
+
   return [
     {
       post_id: postId,
       snapshot_id: snapshotId,
-      block_key: "core_growth",
-      label: "Core growth",
-      value: { amount: row.core_amount, before: row.core_before, after: row.core_after } as Json,
-      visibility: "private",
+      block_key: "level",
+      label: "LVL",
+      value: {
+        levelBefore: context.levelBefore,
+        levelAfter: context.levelAfter,
+        leveledUp: context.levelAfter > context.levelBefore
+      } as Json,
+      visibility: "public",
       sort_order: 0
     },
     {
       post_id: postId,
       snapshot_id: snapshotId,
-      block_key: "wallet_income",
-      label: "Wallet income",
-      value: { amount: row.wallet_amount } as Json,
-      visibility: "private",
+      block_key: "total_core_growth",
+      label: "Total Core Growth",
+      value: {
+        amount: totalCoreGrowth,
+        coreInterestAmount: row.core_amount,
+        teamBonusAmount: context.teamBonusAmount,
+        pendingSources: ["challenge_rewards", "manual_core_topups"]
+      } as Json,
+      visibility: "public",
       sort_order: 1
     },
     {
       post_id: postId,
       snapshot_id: snapshotId,
-      block_key: "daily_rate",
-      label: "Daily rate",
-      value: { percent: row.daily_rate } as Json,
-      visibility: "private",
+      block_key: "team_strength",
+      label: "Team Strength",
+      value: {
+        levelSum: context.teamStrength,
+        memberCount: context.teamMemberCount
+      } as Json,
+      visibility: "public",
       sort_order: 2
-    },
-    {
-      post_id: postId,
-      snapshot_id: snapshotId,
-      block_key: "reinvest",
-      label: "Reinvest",
-      value: { percent: row.reinvest_percent } as Json,
-      visibility: "private",
-      sort_order: 3
     }
   ];
 }
 
-function buildSnapshotPayload(row: DailyCoreAccrual): Json {
+function buildSnapshotPayload(row: DailyCoreAccrual, context: DailyGrowthContext): Json {
   return {
     source: "daily_core_accruals",
     accrualDate: row.accrual_date,
-    sourceCreatedAt: row.created_at
+    sourceCreatedAt: row.created_at,
+    teamBonusAmount: context.teamBonusAmount,
+    levelBefore: context.levelBefore,
+    levelAfter: context.levelAfter,
+    teamStrength: context.teamStrength,
+    teamMemberCount: context.teamMemberCount
   };
 }
 
 function buildDefaultBody(row: DailyCoreAccrual): string {
-  return `Daily Core progress for ${row.accrual_date}`;
+  return `My Growth: ${formatGrowthDate(row.accrual_date)}`;
+}
+
+function shouldRefreshDefaultBody(value: string | null): boolean {
+  return !value || value.startsWith("Daily Core progress for ");
+}
+
+function formatGrowthDate(value: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "long",
+    timeZone: "UTC"
+  }).format(new Date(`${value}T00:00:00Z`));
 }
 
 async function readJsonBody(request: NextRequest): Promise<{ date?: unknown }> {

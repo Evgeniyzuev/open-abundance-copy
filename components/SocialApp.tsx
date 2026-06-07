@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BookOpen, ChevronDown, ChevronUp, Copy, Edit3, ExternalLink, Languages, Link, Newspaper, Save, Send, Share2, Trash2, UserRound, Users, X } from "lucide-react";
+import { Bell, BookOpen, ChevronDown, ChevronUp, Copy, Edit3, ExternalLink, Eye, EyeOff, Languages, Link, Newspaper, Save, Send, Share2, Trash2, UserRound, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useUserContext } from "@/components/UserProvider";
@@ -1017,14 +1017,31 @@ function DailyDraftEditor({
   return (
     <div className="daily-draft-editor">
       <textarea value={post.body ?? ""} maxLength={700} onChange={(event) => onBodyChange(event.target.value)} />
+      <div className="stat-block-picker-heading">
+        <span>{t("social.post.visibilitySettings")}</span>
+      </div>
       <div className="stat-block-picker">
-        {post.statBlocks.map((block) => (
-          <button className={block.visibility === "public" ? "stat-block-toggle active" : "stat-block-toggle"} type="button" key={block.id} onClick={() => onToggleBlock(block.block_key)}>
-            <span>{t(statBlockLabelKey(block.block_key))}</span>
-            <strong>{formatStatBlockValue(block, locale)}</strong>
-            <small>{t(block.visibility === "public" ? "social.post.publicBlock" : "social.post.privateBlock")}</small>
-          </button>
-        ))}
+        {post.statBlocks.map((block) => {
+          const isPublic = block.visibility === "public";
+          const blockLabel = t(statBlockLabelKey(block.block_key));
+          return (
+            <button
+              aria-label={t(isPublic ? "social.post.hideBlock" : "social.post.showBlock", { block: blockLabel })}
+              aria-pressed={isPublic}
+              className={statBlockClassName(block, "stat-block-toggle", isPublic)}
+              type="button"
+              key={block.id}
+              onClick={() => onToggleBlock(block.block_key)}
+            >
+              <span>{blockLabel}</span>
+              <strong>{formatStatBlockValue(block, locale)}</strong>
+              <small>
+                {isPublic ? <Eye size={13} /> : <EyeOff size={13} />}
+                {t(isPublic ? "social.post.publicBlock" : "social.post.privateBlock")}
+              </small>
+            </button>
+          );
+        })}
       </div>
       <button className="secondary-button primary-social-action" type="button" disabled={saving || post.status === "published"} onClick={onPublish}>
         <Send size={16} />
@@ -1181,7 +1198,7 @@ function StatBlockGrid({ blocks, locale, t }: { blocks: FeedStatBlock[]; locale:
   return (
     <div className="post-stat-grid">
       {blocks.map((block) => (
-        <span key={block.id}>
+        <span className={statBlockClassName(block, "post-stat-block")} key={block.id}>
           <small>{t(statBlockLabelKey(block.block_key))}</small>
           <strong>{formatStatBlockValue(block, locale)}</strong>
         </span>
@@ -1348,6 +1365,9 @@ function postStatusLabelKey(status: FeedPost["status"]): MessageKey {
 }
 
 function statBlockLabelKey(blockKey: string): MessageKey {
+  if (blockKey === "level") return "social.post.level";
+  if (blockKey === "total_core_growth") return "social.post.totalCoreGrowth";
+  if (blockKey === "team_strength") return "social.post.teamStrength";
   if (blockKey === "core_growth") return "social.post.coreGrowth";
   if (blockKey === "wallet_income") return "social.post.walletIncome";
   if (blockKey === "daily_rate") return "social.post.dailyRate";
@@ -1360,6 +1380,27 @@ function formatPostDate(post: FeedPost, locale: AppLocale): string {
 }
 
 function formatStatBlockValue(block: FeedStatBlock, locale: AppLocale): string {
+  if (block.block_key === "level") {
+    const levelAfter = readValueNumber(block.value, "levelAfter");
+    const levelBefore = readValueNumber(block.value, "levelBefore");
+    const leveledUp = Boolean(readValue(block.value, "leveledUp"));
+    if (!Number.isFinite(levelAfter)) return "Lvl 0";
+    return leveledUp && Number.isFinite(levelBefore) ? `Lvl ${levelBefore} -> ${levelAfter}` : `Lvl ${levelAfter}`;
+  }
+
+  if (block.block_key === "total_core_growth") {
+    const amount = readValueNumber(block.value, "amount");
+    return `+${formatMoney(Number.isFinite(amount) ? amount : 0, locale)}`;
+  }
+
+  if (block.block_key === "team_strength") {
+    const levelSum = readValueNumber(block.value, "levelSum");
+    const memberCount = readValueNumber(block.value, "memberCount");
+    const members = Number.isFinite(memberCount) ? memberCount : 0;
+    const strength = Number.isFinite(levelSum) ? levelSum : 0;
+    return `${strength} LVL / ${members}`;
+  }
+
   if (block.block_key === "daily_rate" || block.block_key === "reinvest") {
     const percent = readValueNumber(block.value, "percent");
     return Number.isFinite(percent) ? formatPercentValue(percent) : "0%";
@@ -1369,9 +1410,20 @@ function formatStatBlockValue(block: FeedStatBlock, locale: AppLocale): string {
   return formatMoney(Number.isFinite(amount) ? amount : 0, locale);
 }
 
+function statBlockClassName(block: FeedStatBlock, baseClassName: string, active = false): string {
+  const classNames = [baseClassName];
+  if (active) classNames.push("active");
+  if (block.block_key === "level" && Boolean(readValue(block.value, "leveledUp"))) classNames.push("level-up");
+  return classNames.join(" ");
+}
+
+function readValue(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return (value as Record<string, unknown>)[key];
+}
+
 function readValueNumber(value: unknown, key: string): number {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return Number.NaN;
-  const raw = (value as Record<string, unknown>)[key];
+  const raw = readValue(value, key);
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
