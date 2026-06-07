@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, ChevronDown, ChevronUp, Copy, Edit3, ExternalLink, Languages, Link, RefreshCw, Save, Share2, Trash2, UserRound, Users, X } from "lucide-react";
+import { Bell, BookOpen, ChevronDown, ChevronUp, Copy, Edit3, ExternalLink, Languages, Link, Newspaper, RefreshCw, Save, Send, Share2, Trash2, UserRound, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useUserContext } from "@/components/UserProvider";
@@ -9,7 +9,8 @@ import { formatAdaptiveMoney as formatMoney } from "@/lib/moneyFormat";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
 import { DEFAULT_PROFILE_VISIBILITY_SETTINGS, PROFILE_VISIBILITY_KEYS, PROFILE_VISIBILITY_LEVELS, type ProfileVisibility, type ProfileVisibilityKey, type ProfileVisibilitySettings } from "@/lib/socialProfile";
 
-type SocialTab = "profile" | "teams";
+type SocialTab = "feed" | "blog" | "profile" | "teams";
+type SocialTabChange = (tab: SocialTab) => void;
 type ReferralLink = { code: string; url: string };
 type TeamProfile = {
   user_id: string;
@@ -86,6 +87,37 @@ type PublicProfilePayload = {
   visibleBlocks: Record<string, boolean>;
   error?: string;
 };
+type FeedStatBlock = {
+  id: string;
+  post_id: string;
+  snapshot_id: string;
+  block_key: string;
+  label: string;
+  value: unknown;
+  visibility: string;
+  sort_order: number;
+};
+type FeedPost = {
+  id: string;
+  author_user_id: string;
+  snapshot_id: string | null;
+  post_type: string;
+  status: "draft" | "published" | "archived";
+  visibility: string;
+  body: string | null;
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+  deleted_at: string | null;
+  author: TeamProfile | null;
+  statBlocks: FeedStatBlock[];
+};
+type FeedPayload = {
+  scope: "feed" | "blog";
+  author: TeamProfile | null;
+  posts: FeedPost[];
+  error?: string;
+};
 type ProfileEditorState = {
   bio: string;
   linkLabel: string;
@@ -94,7 +126,17 @@ type ProfileEditorState = {
   visibilitySettings: ProfileVisibilitySettings;
 };
 
-export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { activeTab: SocialTab; refreshNonce: number; onRefresh: () => Promise<void> }) {
+export default function SocialApp({
+  activeTab,
+  refreshNonce,
+  onRefresh,
+  onTabChange
+}: {
+  activeTab: SocialTab;
+  refreshNonce: number;
+  onRefresh: () => Promise<void>;
+  onTabChange: SocialTabChange;
+}) {
   const { user, profile, core, loading, refreshing, error, locale, setLocale, t } = useUserContext();
   const [referralLink, setReferralLink] = useState<ReferralLink | null>(null);
   const [teamContext, setTeamContext] = useState<TeamContext | null>(null);
@@ -114,6 +156,13 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
   const [publicProfile, setPublicProfile] = useState<PublicProfilePayload | null>(null);
   const [publicProfileLoading, setPublicProfileLoading] = useState(false);
   const [contactSavingId, setContactSavingId] = useState<string | null>(null);
+  const [feedPayload, setFeedPayload] = useState<FeedPayload | null>(null);
+  const [blogPayload, setBlogPayload] = useState<FeedPayload | null>(null);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [feedSaving, setFeedSaving] = useState(false);
+  const [dailyDraft, setDailyDraft] = useState<FeedPost | null>(null);
+  const [selectedBlogAuthorId, setSelectedBlogAuthorId] = useState<string | null>(null);
+  const [selectedPost, setSelectedPost] = useState<FeedPost | null>(null);
 
   useEffect(() => {
     setSocialError(null);
@@ -134,7 +183,14 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
     setPublicProfile(null);
     setPublicProfileLoading(false);
     setContactSavingId(null);
-  }, [activeTab, user?.id]);
+    setFeedPayload(null);
+    setBlogPayload(null);
+    setFeedLoading(false);
+    setFeedSaving(false);
+    setDailyDraft(null);
+    setSelectedBlogAuthorId(null);
+    setSelectedPost(null);
+  }, [user?.id]);
 
   const loadReferralLink = useCallback(async () => {
     if (!user) return;
@@ -186,6 +242,48 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
     await Promise.all([loadReferralLink(), loadSocialProfile()]);
   }, [loadReferralLink, loadSocialProfile]);
 
+  const loadFeed = useCallback(async () => {
+    if (!user) return;
+    setFeedLoading(true);
+    try {
+      const token = await getAccessToken();
+      const response = await fetch(`/api/social/feed?scope=feed&ts=${Date.now()}`, {
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Cache-Control": "no-cache"
+        }
+      });
+      const payload = (await response.json()) as FeedPayload;
+      if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load feed.");
+      setFeedPayload(payload);
+    } finally {
+      setFeedLoading(false);
+    }
+  }, [user]);
+
+  const loadBlog = useCallback(async () => {
+    if (!user) return;
+    setFeedLoading(true);
+    try {
+      const token = await getAccessToken();
+      const params = new URLSearchParams({ scope: "blog", ts: String(Date.now()) });
+      if (selectedBlogAuthorId) params.set("authorUserId", selectedBlogAuthorId);
+      const response = await fetch(`/api/social/feed?${params.toString()}`, {
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Cache-Control": "no-cache"
+        }
+      });
+      const payload = (await response.json()) as FeedPayload;
+      if (!response.ok || payload.error) throw new Error(payload.error ?? "Failed to load blog.");
+      setBlogPayload(payload);
+    } finally {
+      setFeedLoading(false);
+    }
+  }, [selectedBlogAuthorId, user]);
+
   useEffect(() => {
     if (!user) {
       setReferralLink(null);
@@ -201,13 +299,13 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
       return;
     }
 
-    const load = activeTab === "teams" ? loadTeamContext : loadProfileTab;
+    const load = activeTab === "feed" ? loadFeed : activeTab === "blog" ? loadBlog : activeTab === "teams" ? loadTeamContext : loadProfileTab;
     setSocialError(null);
     load().catch((loadError) => {
       console.warn("Social data load failed", loadError);
       setSocialError(loadError instanceof Error ? loadError.message : "Failed to load social data.");
     });
-  }, [activeTab, loadProfileTab, loadTeamContext, refreshNonce, user]);
+  }, [activeTab, loadBlog, loadFeed, loadProfileTab, loadTeamContext, refreshNonce, user]);
 
   const displayName = profile?.display_name ?? user?.email ?? t("profile.guest");
   const handle = profile?.username ? `@${profile.username}` : user?.email ?? t("profile.localMode");
@@ -320,6 +418,86 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
     }
   }
 
+  async function createDailyDraft() {
+    setFeedSaving(true);
+    setSocialError(null);
+    try {
+      const token = await getAccessToken();
+      const response = await fetch("/api/social/feed/daily-progress/draft", {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({})
+      });
+      const payload = (await response.json()) as { post?: FeedPost; error?: string };
+      if (!response.ok || payload.error || !payload.post) throw new Error(payload.error ?? "Failed to create daily draft.");
+      setDailyDraft(payload.post);
+      await Promise.all([loadFeed(), loadBlog()]);
+    } catch (draftError) {
+      console.warn("Daily draft create failed", draftError);
+      setSocialError(draftError instanceof Error ? draftError.message : "Failed to create daily draft.");
+    } finally {
+      setFeedSaving(false);
+    }
+  }
+
+  async function publishPost(post: FeedPost) {
+    setFeedSaving(true);
+    setSocialError(null);
+    try {
+      const token = await getAccessToken();
+      const response = await fetch(`/api/social/feed/posts/${post.id}`, {
+        method: "PATCH",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          action: "publish",
+          body: post.body,
+          visibility: post.visibility,
+          statBlocks: post.statBlocks.map((block) => ({
+            blockKey: block.block_key,
+            visibility: block.visibility === "public" ? "public" : "private"
+          }))
+        })
+      });
+      const payload = (await response.json()) as { post?: FeedPost; error?: string };
+      if (!response.ok || payload.error || !payload.post) throw new Error(payload.error ?? "Failed to publish post.");
+      const updatedPost = payload.post;
+      setDailyDraft((current) => current?.id === updatedPost.id ? updatedPost : current);
+      setSelectedPost((current) => current?.id === updatedPost.id ? updatedPost : current);
+      await Promise.all([loadFeed(), loadBlog()]);
+    } catch (publishError) {
+      console.warn("Feed post publish failed", publishError);
+      setSocialError(publishError instanceof Error ? publishError.message : "Failed to publish post.");
+    } finally {
+      setFeedSaving(false);
+    }
+  }
+
+  function updateDailyDraftBody(body: string) {
+    setDailyDraft((current) => current ? { ...current, body } : current);
+  }
+
+  function toggleDailyDraftBlock(blockKey: string) {
+    setDailyDraft((current) => current ? {
+      ...current,
+      statBlocks: current.statBlocks.map((block) => block.block_key === blockKey
+        ? { ...block, visibility: block.visibility === "public" ? "private" : "public" }
+        : block)
+    } : current);
+  }
+
+  function openAuthorBlog(authorUserId: string) {
+    setSelectedBlogAuthorId(authorUserId === user?.id ? null : authorUserId);
+    onTabChange("blog");
+  }
+
   async function toggleTeamRewards() {
     const nextOpen = !teamRewardsOpen;
     setTeamRewardsOpen(nextOpen);
@@ -371,6 +549,60 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
           <RefreshCw size={19} className={refreshing ? "spin" : ""} />
         </button>
       </header>
+
+      {activeTab === "feed" && !user && !loading ? (
+        <section className="profile-panel">
+          <div className="profile-avatar placeholder">
+            <Newspaper size={34} />
+          </div>
+          <strong>{t("social.feed.title")}</strong>
+          <p>{t("profile.registrationRequired")}</p>
+        </section>
+      ) : null}
+
+      {activeTab === "feed" && user ? (
+        <FeedView
+          dailyDraft={dailyDraft}
+          feedPayload={feedPayload}
+          loading={feedLoading}
+          saving={feedSaving}
+          locale={locale}
+          t={t}
+          onCreateDraft={createDailyDraft}
+          onDraftBodyChange={updateDailyDraftBody}
+          onOpenAuthor={openPublicProfile}
+          onOpenBlog={openAuthorBlog}
+          onOpenPost={setSelectedPost}
+          onPublish={publishPost}
+          onToggleDraftBlock={toggleDailyDraftBlock}
+        />
+      ) : null}
+
+      {activeTab === "blog" && !user && !loading ? (
+        <section className="profile-panel">
+          <div className="profile-avatar placeholder">
+            <BookOpen size={34} />
+          </div>
+          <strong>{t("social.blog.title")}</strong>
+          <p>{t("profile.registrationRequired")}</p>
+        </section>
+      ) : null}
+
+      {activeTab === "blog" && user ? (
+        <BlogView
+          blogPayload={blogPayload}
+          currentUserId={user.id}
+          loading={feedLoading}
+          locale={locale}
+          saving={feedSaving}
+          selectedBlogAuthorId={selectedBlogAuthorId}
+          t={t}
+          onOpenAuthor={openPublicProfile}
+          onOpenOwnBlog={() => setSelectedBlogAuthorId(null)}
+          onOpenPost={setSelectedPost}
+          onPublish={publishPost}
+        />
+      ) : null}
 
       {activeTab === "teams" ? (
         <section className="profile-panel">
@@ -634,7 +866,339 @@ export default function SocialApp({ activeTab, refreshNonce, onRefresh }: { acti
           </section>
         </div>
       ) : null}
+      {selectedPost ? (
+        <PostDetailModal
+          locale={locale}
+          post={selectedPost}
+          t={t}
+          onClose={() => setSelectedPost(null)}
+          onOpenAuthor={openPublicProfile}
+          onOpenBlog={openAuthorBlog}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function FeedView({
+  dailyDraft,
+  feedPayload,
+  loading,
+  saving,
+  locale,
+  t,
+  onCreateDraft,
+  onDraftBodyChange,
+  onOpenAuthor,
+  onOpenBlog,
+  onOpenPost,
+  onPublish,
+  onToggleDraftBlock
+}: {
+  dailyDraft: FeedPost | null;
+  feedPayload: FeedPayload | null;
+  loading: boolean;
+  saving: boolean;
+  locale: AppLocale;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
+  onCreateDraft: () => void;
+  onDraftBodyChange: (body: string) => void;
+  onOpenAuthor: (userId: string) => void;
+  onOpenBlog: (userId: string) => void;
+  onOpenPost: (post: FeedPost) => void;
+  onPublish: (post: FeedPost) => void;
+  onToggleDraftBlock: (blockKey: string) => void;
+}) {
+  const posts = feedPayload?.posts ?? [];
+
+  return (
+    <section className="feed-layout">
+      <section className="feed-composer">
+        <div className="section-heading-row">
+          <span>{t("social.feed.dailyDraft")}</span>
+          <button className="secondary-button" type="button" disabled={saving} onClick={onCreateDraft}>
+            <Newspaper size={16} />
+            {t("social.feed.createDraft")}
+          </button>
+        </div>
+        {dailyDraft ? (
+          <DailyDraftEditor
+            locale={locale}
+            post={dailyDraft}
+            saving={saving}
+            t={t}
+            onBodyChange={onDraftBodyChange}
+            onPublish={() => onPublish(dailyDraft)}
+            onToggleBlock={onToggleDraftBlock}
+          />
+        ) : null}
+      </section>
+      <PostList
+        emptyText={t("social.feed.empty")}
+        loading={loading}
+        locale={locale}
+        posts={posts}
+        showBlogAction={true}
+        t={t}
+        onOpenAuthor={onOpenAuthor}
+        onOpenBlog={onOpenBlog}
+        onOpenPost={onOpenPost}
+        onPublish={onPublish}
+      />
+    </section>
+  );
+}
+
+function BlogView({
+  blogPayload,
+  currentUserId,
+  loading,
+  locale,
+  saving,
+  selectedBlogAuthorId,
+  t,
+  onOpenAuthor,
+  onOpenOwnBlog,
+  onOpenPost,
+  onPublish
+}: {
+  blogPayload: FeedPayload | null;
+  currentUserId: string;
+  loading: boolean;
+  locale: AppLocale;
+  saving: boolean;
+  selectedBlogAuthorId: string | null;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
+  onOpenAuthor: (userId: string) => void;
+  onOpenOwnBlog: () => void;
+  onOpenPost: (post: FeedPost) => void;
+  onPublish: (post: FeedPost) => void;
+}) {
+  const posts = blogPayload?.posts ?? [];
+  const author = blogPayload?.author ?? posts[0]?.author ?? null;
+  const title = selectedBlogAuthorId ? formatProfileName(author, selectedBlogAuthorId) : t("social.blog.mine");
+
+  return (
+    <section className="feed-layout">
+      <section className="blog-heading">
+        <div>
+          <span>{t("social.blog.title")}</span>
+          <strong>{title}</strong>
+        </div>
+        {selectedBlogAuthorId && selectedBlogAuthorId !== currentUserId ? (
+          <button className="secondary-button" type="button" onClick={onOpenOwnBlog}>
+            <UserRound size={16} />
+            {t("social.blog.mine")}
+          </button>
+        ) : null}
+      </section>
+      <PostList
+        emptyText={t("social.blog.empty")}
+        loading={loading}
+        locale={locale}
+        posts={posts}
+        saving={saving}
+        showBlogAction={false}
+        t={t}
+        onOpenAuthor={onOpenAuthor}
+        onOpenBlog={onOpenAuthor}
+        onOpenPost={onOpenPost}
+        onPublish={onPublish}
+      />
+    </section>
+  );
+}
+
+function DailyDraftEditor({
+  locale,
+  post,
+  saving,
+  t,
+  onBodyChange,
+  onPublish,
+  onToggleBlock
+}: {
+  locale: AppLocale;
+  post: FeedPost;
+  saving: boolean;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
+  onBodyChange: (body: string) => void;
+  onPublish: () => void;
+  onToggleBlock: (blockKey: string) => void;
+}) {
+  return (
+    <div className="daily-draft-editor">
+      <textarea value={post.body ?? ""} maxLength={700} onChange={(event) => onBodyChange(event.target.value)} />
+      <div className="stat-block-picker">
+        {post.statBlocks.map((block) => (
+          <button className={block.visibility === "public" ? "stat-block-toggle active" : "stat-block-toggle"} type="button" key={block.id} onClick={() => onToggleBlock(block.block_key)}>
+            <span>{t(statBlockLabelKey(block.block_key))}</span>
+            <strong>{formatStatBlockValue(block, locale)}</strong>
+            <small>{t(block.visibility === "public" ? "social.post.publicBlock" : "social.post.privateBlock")}</small>
+          </button>
+        ))}
+      </div>
+      <button className="secondary-button primary-social-action" type="button" disabled={saving || post.status === "published"} onClick={onPublish}>
+        <Send size={16} />
+        {t("social.feed.publish")}
+      </button>
+    </div>
+  );
+}
+
+function PostList({
+  emptyText,
+  loading,
+  locale,
+  posts,
+  saving,
+  showBlogAction,
+  t,
+  onOpenAuthor,
+  onOpenBlog,
+  onOpenPost,
+  onPublish
+}: {
+  emptyText: string;
+  loading: boolean;
+  locale: AppLocale;
+  posts: FeedPost[];
+  saving?: boolean;
+  showBlogAction: boolean;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
+  onOpenAuthor: (userId: string) => void;
+  onOpenBlog: (userId: string) => void;
+  onOpenPost: (post: FeedPost) => void;
+  onPublish: (post: FeedPost) => void;
+}) {
+  if (loading) return <p className="finance-error neutral">{t("app.common.loading")}</p>;
+  if (!posts.length) return <p className="feed-empty">{emptyText}</p>;
+
+  return (
+    <div className="feed-post-list">
+      {posts.map((post) => (
+        <PostCard
+          key={post.id}
+          locale={locale}
+          post={post}
+          saving={Boolean(saving)}
+          showBlogAction={showBlogAction}
+          t={t}
+          onOpenAuthor={onOpenAuthor}
+          onOpenBlog={onOpenBlog}
+          onOpenPost={onOpenPost}
+          onPublish={onPublish}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PostCard({
+  locale,
+  post,
+  saving,
+  showBlogAction,
+  t,
+  onOpenAuthor,
+  onOpenBlog,
+  onOpenPost,
+  onPublish
+}: {
+  locale: AppLocale;
+  post: FeedPost;
+  saving: boolean;
+  showBlogAction: boolean;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
+  onOpenAuthor: (userId: string) => void;
+  onOpenBlog: (userId: string) => void;
+  onOpenPost: (post: FeedPost) => void;
+  onPublish: (post: FeedPost) => void;
+}) {
+  return (
+    <article className="feed-post-card">
+      <header>
+        <button className="feed-author" type="button" onClick={() => { void onOpenAuthor(post.author_user_id); }}>
+          <span className="feed-author-avatar">
+            {post.author?.avatar_url ? <img alt="" src={post.author.avatar_url} /> : <UserRound size={18} />}
+          </span>
+          <span>{formatProfileName(post.author, post.author_user_id)}</span>
+        </button>
+        <small>{formatPostDate(post, locale)}</small>
+      </header>
+      <button className="feed-post-body" type="button" onClick={() => onOpenPost(post)}>
+        <p>{post.body ?? t("social.post.detail")}</p>
+        <StatBlockGrid blocks={post.statBlocks} locale={locale} t={t} />
+      </button>
+      <footer>
+        <span className={`post-status ${post.status}`}>{t(postStatusLabelKey(post.status))}</span>
+        <div className="feed-card-actions">
+          {showBlogAction ? (
+            <button className="finance-small-icon-button" type="button" aria-label={t("social.feed.openBlog")} onClick={() => onOpenBlog(post.author_user_id)}>
+              <BookOpen size={15} />
+            </button>
+          ) : null}
+          {post.status === "draft" ? (
+            <button className="finance-small-icon-button primary" type="button" disabled={saving} aria-label={t("social.feed.publish")} onClick={() => onPublish(post)}>
+              <Send size={15} />
+            </button>
+          ) : null}
+        </div>
+      </footer>
+    </article>
+  );
+}
+
+function PostDetailModal({
+  locale,
+  post,
+  t,
+  onClose,
+  onOpenAuthor,
+  onOpenBlog
+}: {
+  locale: AppLocale;
+  post: FeedPost;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
+  onClose: () => void;
+  onOpenAuthor: (userId: string) => void;
+  onOpenBlog: (userId: string) => void;
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <section className="modal-sheet post-detail-modal" role="dialog" aria-modal="true" aria-label={t("social.post.detail")} onClick={(event) => event.stopPropagation()}>
+        <button className="modal-close" type="button" aria-label={t("app.common.close")} onClick={onClose}>
+          <X size={18} />
+        </button>
+        <button className="feed-author detail-author" type="button" onClick={() => { void onOpenAuthor(post.author_user_id); }}>
+          <span className="feed-author-avatar">
+            {post.author?.avatar_url ? <img alt="" src={post.author.avatar_url} /> : <UserRound size={18} />}
+          </span>
+          <span>{formatProfileName(post.author, post.author_user_id)}</span>
+        </button>
+        <h2>{post.body ?? t("social.post.detail")}</h2>
+        <span className={`post-status ${post.status}`}>{t(postStatusLabelKey(post.status))} - {formatPostDate(post, locale)}</span>
+        <StatBlockGrid blocks={post.statBlocks} locale={locale} t={t} />
+        <button className="secondary-button" type="button" onClick={() => onOpenBlog(post.author_user_id)}>
+          <BookOpen size={16} />
+          {t("social.feed.openBlog")}
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function StatBlockGrid({ blocks, locale, t }: { blocks: FeedStatBlock[]; locale: AppLocale; t: (key: MessageKey, values?: Record<string, string | number>) => string }) {
+  if (!blocks.length) return null;
+  return (
+    <div className="post-stat-grid">
+      {blocks.map((block) => (
+        <span key={block.id}>
+          <small>{t(statBlockLabelKey(block.block_key))}</small>
+          <strong>{formatStatBlockValue(block, locale)}</strong>
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -787,6 +1351,46 @@ function contactSourceLabelKey(source: string): MessageKey {
   if (source === "team_leader") return "profile.contacts.sourceLeader";
   if (source === "team_member") return "profile.contacts.sourceMember";
   return "profile.contacts.sourceManual";
+}
+
+function postStatusLabelKey(status: FeedPost["status"]): MessageKey {
+  if (status === "published") return "social.post.published";
+  if (status === "archived") return "social.post.archived";
+  return "social.post.draft";
+}
+
+function statBlockLabelKey(blockKey: string): MessageKey {
+  if (blockKey === "core_growth") return "social.post.coreGrowth";
+  if (blockKey === "wallet_income") return "social.post.walletIncome";
+  if (blockKey === "daily_rate") return "social.post.dailyRate";
+  if (blockKey === "reinvest") return "social.post.reinvest";
+  return "social.post.detail";
+}
+
+function formatPostDate(post: FeedPost, locale: AppLocale): string {
+  return formatDate(post.published_at ?? post.created_at, locale);
+}
+
+function formatStatBlockValue(block: FeedStatBlock, locale: AppLocale): string {
+  if (block.block_key === "daily_rate" || block.block_key === "reinvest") {
+    const percent = readValueNumber(block.value, "percent");
+    return Number.isFinite(percent) ? formatPercentValue(percent) : "0%";
+  }
+
+  const amount = readValueNumber(block.value, "amount");
+  return formatMoney(Number.isFinite(amount) ? amount : 0, locale);
+}
+
+function readValueNumber(value: unknown, key: string): number {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return Number.NaN;
+  const raw = (value as Record<string, unknown>)[key];
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function formatPercentValue(value: number): string {
+  const percent = Math.abs(value) <= 1 ? value * 100 : value;
+  return `${percent.toLocaleString("en-US", { maximumFractionDigits: 4 })}%`;
 }
 
 function readableHost(value: string): string {

@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { CheckSquare, FileText, Heart, Landmark, Map, Sparkles, Target, Trophy, TrendingUp, UserRound, Users, Wallet } from "lucide-react";
+import { BookOpen, CheckSquare, FileText, Heart, Landmark, Map, Newspaper, Sparkles, Target, Trophy, TrendingUp, UserRound, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import ChallengesApp from "@/components/ChallengesApp";
 import RecommendedWishes from "@/components/RecommendedWishes";
@@ -14,7 +14,7 @@ import type { MessageKey } from "@/lib/i18n";
 type MainTabId = "goals" | "challenges" | "spark" | "wallet" | "people";
 type GoalTabId = "desires" | "notes" | "checks" | "map" | "growth";
 type WalletTabId = "wallet" | "core";
-type SocialTabId = "profile" | "teams";
+type SocialTabId = "feed" | "blog" | "teams" | "profile";
 type TFunction = (key: MessageKey, values?: Record<string, string | number>) => string;
 
 type MainTab = {
@@ -61,8 +61,10 @@ const walletTabs: TopTab[] = [
 ];
 
 const socialTabs: TopTab[] = [
-  { id: "profile", titleKey: "profile.title", icon: UserRound },
-  { id: "teams", titleKey: "app.nav.people", icon: Users }
+  { id: "feed", titleKey: "social.feed.title", icon: Newspaper },
+  { id: "blog", titleKey: "social.blog.title", icon: BookOpen },
+  { id: "teams", titleKey: "app.nav.people", icon: Users },
+  { id: "profile", titleKey: "profile.title", icon: UserRound }
 ];
 
 const PULL_THRESHOLD_PX = 72;
@@ -73,7 +75,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const [activeMainTab, setActiveMainTab] = useState<MainTabId>("goals");
   const [activeGoalTab, setActiveGoalTab] = useState<GoalTabId>("notes");
   const [activeWalletTab, setActiveWalletTab] = useState<WalletTabId>("wallet");
-  const [activeSocialTab, setActiveSocialTab] = useState<SocialTabId>("profile");
+  const [activeSocialTab, setActiveSocialTab] = useState<SocialTabId>("feed");
   const [navHidden, setNavHidden] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
@@ -235,7 +237,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
         {showChecks ? <TasksApp /> : null}
         {showChallenges ? <ChallengesApp refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("challenges")} /> : null}
         {showWallet ? <WalletApp activeTab={activeWalletTab} refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("wallet")} /> : null}
-        {showPeople ? <SocialApp activeTab={activeSocialTab} refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("social")} /> : null}
+        {showPeople ? <SocialApp activeTab={activeSocialTab} refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("social")} onTabChange={setActiveSocialTab} /> : null}
         {!showNotes && !showWishes && !showChecks && !showChallenges && !showWallet && !showPeople ? <PlaceholderScreen title={currentTitle} /> : null}
       </section>
       <BottomTabBar activeTab={activeMainTab} hidden={navHidden} t={t} onTabChange={setActiveMainTab} />

@@ -763,10 +763,14 @@ Implemented 2026-06-05:
 - добавлены API для собственного профиля и просмотра публичного профиля другого пользователя;
 - в Social UI добавлено редактирование описания, одной внешней ссылки и видимости блоков;
 - публичный профиль фильтрует `bio` и ссылки по отношению viewer к владельцу профиля.
+- добавлены `progress_snapshots`, `feed_posts`, `feed_post_stat_blocks` для daily Core progress posts;
+- добавлены API `GET /api/social/feed`, `POST /api/social/feed/daily-progress/draft`, `PATCH /api/social/feed/posts/[postId]`;
+- в Social UI добавлены вкладки `feed` и `blog`: daily draft composer, публикация public-поста, общий feed, личный blog и modal detail поста;
+- public feed показывает только `published + public + deleted_at is null`, а личный blog владельца показывает его drafts/published/archived.
 
 Pending:
 
-- полноценные `feed_posts`/`feed_post_media` и личная лента профиля;
+- `feed_post_media`, ручные текстовые посты, реакции, комментарии, сохранения и grid/list режим blog;
 - visibility-фильтрация реальных желаний, достижений, доходов, расходов и постов после появления этих социальных сущностей;
 - отдельные публичные profile URLs вне текущего Social modal.
 
