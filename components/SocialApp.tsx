@@ -97,6 +97,21 @@ type FeedStatBlock = {
   visibility: string;
   sort_order: number;
 };
+type FeedExternalLink = {
+  id: string;
+  post_id: string;
+  provider: string;
+  external_url: string;
+  external_post_id: string | null;
+  author_handle: string | null;
+  title: string | null;
+  caption: string | null;
+  thumbnail_url: string | null;
+  embed_status: string;
+  relation: string;
+  created_at: string;
+  updated_at: string;
+};
 type FeedPost = {
   id: string;
   author_user_id: string;
@@ -111,6 +126,7 @@ type FeedPost = {
   deleted_at: string | null;
   author: TeamProfile | null;
   statBlocks: FeedStatBlock[];
+  externalLinks: FeedExternalLink[];
 };
 type FeedPayload = {
   scope: "feed" | "blog";
@@ -159,6 +175,7 @@ export default function SocialApp({
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedSaving, setFeedSaving] = useState(false);
   const [dailyDraft, setDailyDraft] = useState<FeedPost | null>(null);
+  const [externalLinkUrl, setExternalLinkUrl] = useState("");
   const [selectedBlogAuthorId, setSelectedBlogAuthorId] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<FeedPost | null>(null);
 
@@ -186,6 +203,7 @@ export default function SocialApp({
     setFeedLoading(false);
     setFeedSaving(false);
     setDailyDraft(null);
+    setExternalLinkUrl("");
     setSelectedBlogAuthorId(null);
     setSelectedPost(null);
   }, [user?.id]);
@@ -442,6 +460,35 @@ export default function SocialApp({
     }
   }
 
+  async function createExternalLinkPost() {
+    const url = externalLinkUrl.trim();
+    if (!url) return;
+
+    setFeedSaving(true);
+    setSocialError(null);
+    try {
+      const token = await getAccessToken();
+      const response = await fetch("/api/social/feed", {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ url })
+      });
+      const payload = (await response.json()) as { post?: FeedPost; error?: string };
+      if (!response.ok || payload.error || !payload.post) throw new Error(payload.error ?? "Failed to add external link.");
+      setExternalLinkUrl("");
+      await Promise.all([loadFeed(), loadBlog()]);
+    } catch (linkError) {
+      console.warn("External link post create failed", linkError);
+      setSocialError(linkError instanceof Error ? linkError.message : "Failed to add external link.");
+    } finally {
+      setFeedSaving(false);
+    }
+  }
+
   async function publishPost(post: FeedPost) {
     setFeedSaving(true);
     setSocialError(null);
@@ -551,13 +598,16 @@ export default function SocialApp({
       {activeTab === "feed" && user ? (
         <FeedView
           dailyDraft={dailyDraft}
+          externalLinkUrl={externalLinkUrl}
           feedPayload={feedPayload}
           loading={feedLoading}
           saving={feedSaving}
           locale={locale}
           t={t}
           onCreateDraft={createDailyDraft}
+          onCreateExternalLink={createExternalLinkPost}
           onDraftBodyChange={updateDailyDraftBody}
+          onExternalLinkUrlChange={setExternalLinkUrl}
           onOpenAuthor={openPublicProfile}
           onOpenBlog={openAuthorBlog}
           onOpenPost={setSelectedPost}
@@ -870,13 +920,16 @@ export default function SocialApp({
 
 function FeedView({
   dailyDraft,
+  externalLinkUrl,
   feedPayload,
   loading,
   saving,
   locale,
   t,
   onCreateDraft,
+  onCreateExternalLink,
   onDraftBodyChange,
+  onExternalLinkUrlChange,
   onOpenAuthor,
   onOpenBlog,
   onOpenPost,
@@ -884,13 +937,16 @@ function FeedView({
   onToggleDraftBlock
 }: {
   dailyDraft: FeedPost | null;
+  externalLinkUrl: string;
   feedPayload: FeedPayload | null;
   loading: boolean;
   saving: boolean;
   locale: AppLocale;
   t: (key: MessageKey, values?: Record<string, string | number>) => string;
   onCreateDraft: () => void;
+  onCreateExternalLink: () => void;
   onDraftBodyChange: (body: string) => void;
+  onExternalLinkUrlChange: (url: string) => void;
   onOpenAuthor: (userId: string) => void;
   onOpenBlog: (userId: string) => void;
   onOpenPost: (post: FeedPost) => void;
@@ -920,6 +976,13 @@ function FeedView({
             onToggleBlock={onToggleDraftBlock}
           />
         ) : null}
+        <ExternalLinkComposer
+          saving={saving}
+          t={t}
+          url={externalLinkUrl}
+          onSubmit={onCreateExternalLink}
+          onUrlChange={onExternalLinkUrlChange}
+        />
       </section>
       <PostList
         emptyText={t("social.feed.empty")}
@@ -934,6 +997,40 @@ function FeedView({
         onPublish={onPublish}
       />
     </section>
+  );
+}
+
+function ExternalLinkComposer({
+  saving,
+  t,
+  url,
+  onSubmit,
+  onUrlChange
+}: {
+  saving: boolean;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
+  url: string;
+  onSubmit: () => void;
+  onUrlChange: (url: string) => void;
+}) {
+  return (
+    <form className="external-link-composer" onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
+      <label htmlFor="external-link-url">{t("social.feed.externalLink")}</label>
+      <div>
+        <input
+          id="external-link-url"
+          inputMode="url"
+          maxLength={1000}
+          placeholder={t("social.feed.externalLinkPlaceholder")}
+          type="url"
+          value={url}
+          onChange={(event) => onUrlChange(event.target.value)}
+        />
+        <button className="finance-small-icon-button primary" type="submit" disabled={saving || !url.trim()} aria-label={t("social.feed.addExternalLink")}>
+          <ExternalLink size={15} />
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -1135,6 +1232,7 @@ function PostCard({
         <p>{post.body ?? t("social.post.detail")}</p>
         <StatBlockGrid blocks={post.statBlocks} locale={locale} t={t} />
       </button>
+      <ExternalLinkPreview post={post} />
       <footer>
         <span className={`post-status ${post.status}`}>{t(postStatusLabelKey(post.status))}</span>
         <div className="feed-card-actions">
@@ -1184,12 +1282,27 @@ function PostDetailModal({
         <h2>{post.body ?? t("social.post.detail")}</h2>
         <span className={`post-status ${post.status}`}>{t(postStatusLabelKey(post.status))} - {formatPostDate(post, locale)}</span>
         <StatBlockGrid blocks={post.statBlocks} locale={locale} t={t} />
+        <ExternalLinkPreview post={post} />
         <button className="secondary-button" type="button" onClick={() => onOpenBlog(post.author_user_id)}>
           <BookOpen size={16} />
           {t("social.feed.openBlog")}
         </button>
       </section>
     </div>
+  );
+}
+
+function ExternalLinkPreview({ post }: { post: FeedPost }) {
+  const externalLink = post.externalLinks?.[0];
+  if (!externalLink) return null;
+
+  return (
+    <a className="external-link-preview" href={externalLink.external_url} target="_blank" rel="noreferrer">
+      <span>{formatProviderLabel(externalLink.provider)}</span>
+      <strong>{externalLink.title ?? externalLink.external_url}</strong>
+      {externalLink.author_handle ? <small>{externalLink.author_handle}</small> : null}
+      <ExternalLink size={15} />
+    </a>
   );
 }
 
@@ -1377,6 +1490,15 @@ function statBlockLabelKey(blockKey: string): MessageKey {
 
 function formatPostDate(post: FeedPost, locale: AppLocale): string {
   return formatDate(post.published_at ?? post.created_at, locale);
+}
+
+function formatProviderLabel(provider: string): string {
+  if (provider === "tiktok") return "TikTok";
+  if (provider === "instagram") return "Instagram";
+  if (provider === "telegram") return "Telegram";
+  if (provider === "youtube") return "YouTube";
+  if (provider === "x") return "X";
+  return "Website";
 }
 
 function formatStatBlockValue(block: FeedStatBlock, locale: AppLocale): string {

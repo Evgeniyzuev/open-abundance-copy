@@ -917,10 +917,12 @@ Implemented 2026-06-07:
 - `total_core_growth` сейчас включает daily Core reinvest amount и командный бонус автора за этот день; challenge/task rewards и ручные пополнения Core остаются pending до отдельного ledger source;
 - stat blocks для daily growth создаются публичными по умолчанию, поэтому public feed показывает полный growth post, а private-блоки по-прежнему не раскрываются чужому viewer.
 - видимость отдельных daily post блоков настраивается в daily draft composer перед публикацией; это единая точка выбора, какие snapshot-блоки попадут в общий feed и публичный blog view.
+- добавлен inbound composer/API для внешней ссылки: paste URL -> normalize provider/id/handle -> создать `feed_posts.post_type = external_link` и строку `feed_post_external_links.relation = 'source'`;
+- public feed/blog возвращают `externalLinks` вместе с постом и показывают link-only preview без iframe и без загрузки внешнего media в Supabase Storage.
 
 Pending:
 
-- inbound composer для внешних ссылок, provider detection, external social link cards и lazy embeds;
+- lazy embeds для внешних ссылок после стабилизации link-only preview;
 - outbound share package для daily progress/achievement posts и сохранение external mirrors;
 - daily ledger/audit source для challenge/task rewards и ручных пополнений Core, чтобы включать их в `total_core_growth` без риска двойного счета;
 - daily draft sources для новых публичных желаний, исполненных публичных желаний и расходов внутри системы;
