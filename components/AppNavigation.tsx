@@ -4,11 +4,11 @@ import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { BookOpen, CheckSquare, FileText, Heart, Landmark, Map, Newspaper, Sparkles, Target, Trophy, TrendingUp, UserRound, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import ChallengesApp from "@/components/ChallengesApp";
-import RecommendedWishes from "@/components/RecommendedWishes";
 import SocialApp from "@/components/SocialApp";
 import TasksApp from "@/components/TasksApp";
 import { useUserContext } from "@/components/UserProvider";
 import WalletApp from "@/components/WalletApp";
+import WishesApp from "@/components/WishesApp";
 import type { MessageKey } from "@/lib/i18n";
 
 type MainTabId = "goals" | "challenges" | "spark" | "wallet" | "people";
@@ -233,7 +233,7 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
       <TopTabBar activeMainTab={activeMainTab} activeTab={activeTopTab} hidden={navHidden} tabs={topTabs} t={t} onTabChange={handleTopTabChange} />
       <section className="app-content">
         {showNotes ? notesSlot : null}
-        {showWishes ? <RecommendedWishes refreshNonce={refreshNonce} /> : null}
+        {showWishes ? <WishesApp refreshNonce={refreshNonce} /> : null}
         {showChecks ? <TasksApp /> : null}
         {showChallenges ? <ChallengesApp refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("challenges")} /> : null}
         {showWallet ? <WalletApp activeTab={activeWalletTab} refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("wallet")} /> : null}
