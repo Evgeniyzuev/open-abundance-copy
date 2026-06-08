@@ -305,14 +305,14 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
 
       {user && activeTab === "core" ? (
         <>
-          <BalancePanel
+          {/* <BalancePanel
             title={t("wallet.core")}
             label={t("wallet.core")}
             amount={core?.balance ?? 0}
             locale={locale}
             meta={core ? t("wallet.coreMeta", { level: core.level, percent: core.reinvest_percent, date: formatDate(core.updated_at, locale) }) : t("app.common.created")}
             adaptiveAmount
-          />
+          /> */}
           {core ? <CoreLevelProgress core={core} locale={locale} t={t} /> : null}
           <ReinvestPanel
             value={reinvestValue}
