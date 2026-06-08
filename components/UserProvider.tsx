@@ -8,7 +8,9 @@ import { capturePendingReferral, getOrCreateLocalGuest, markLocalGuestClaimed, m
 import { detectBrowserLocale, normalizeLocale, translate, type AppLocale, type MessageKey } from "@/lib/i18n";
 
 export type UserProfile = Tables<"user_profiles">;
-export type CoreAccount = Tables<"core_accounts">;
+export type CoreAccount = Tables<"core_accounts"> & {
+  next_level_threshold?: number | null;
+};
 export type WalletAccount = Tables<"wallet_accounts">;
 
 type UserContextValue = {

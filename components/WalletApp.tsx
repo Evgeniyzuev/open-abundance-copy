@@ -259,16 +259,6 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
 
   return (
     <section className="finance-screen">
-      <header className="finance-header">
-        <div>
-          <span>Finance</span>
-          <h1>{t("wallet.title")}</h1>
-        </div>
-        <button className="finance-icon-button" type="button" aria-label={t("app.common.refresh")} disabled={refreshing} onClick={() => { void onRefresh(); }}>
-          <RefreshCw size={19} className={refreshing ? "spin" : ""} />
-        </button>
-      </header>
-
       {!user && !loading ? (
         <FinanceState title={t("wallet.registration.title")} description={t("wallet.registration.description")} />
       ) : null}
@@ -322,6 +312,7 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
             meta={core ? t("wallet.coreMeta", { level: core.level, percent: core.reinvest_percent, date: formatDate(core.updated_at, locale) }) : t("app.common.created")}
             adaptiveAmount
           />
+          {core ? <CoreLevelProgress core={core} locale={locale} t={t} /> : null}
           <ReinvestPanel
             value={reinvestValue}
             savedPercent={savedReinvestPercent}
@@ -824,6 +815,43 @@ function BalancePanel({
   );
 }
 
+function CoreLevelProgress({
+  core,
+  locale,
+  t
+}: {
+  core: CoreAccount;
+  locale: AppLocale;
+  t: (key: "app.common.level" | "wallet.coreProgress.aria" | "wallet.coreProgress.max", values?: Record<string, string | number>) => string;
+}) {
+  const threshold = Number.isFinite(core.next_level_threshold ?? NaN) && (core.next_level_threshold ?? 0) > 0 ? core.next_level_threshold ?? null : null;
+  const progress = threshold ? clamp((core.balance / threshold) * 100, 0, 100) : 100;
+  const displayProgress = Math.round(progress);
+  const nextLevel = threshold ? core.level + 1 : core.level;
+
+  return (
+    <section className="core-level-panel" aria-label={t("wallet.coreProgress.aria")}>
+      <div className="core-level-head">
+        <span>{t("app.common.level")} {core.level}</span>
+        <strong>{threshold ? `${formatAdaptiveMoney(core.balance, locale)} / ${formatAdaptiveMoney(threshold, locale)}` : t("wallet.coreProgress.max")}</strong>
+      </div>
+      <div
+        className="core-level-track"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={threshold ?? Math.max(1, core.balance)}
+        aria-valuenow={threshold ? Math.min(core.balance, threshold) : Math.max(1, core.balance)}
+      >
+        <div className="core-level-fill" style={{ width: `${displayProgress}%` }} />
+      </div>
+      <div className="core-level-meta">
+        <span>{displayProgress}%</span>
+        <span>{threshold ? `${t("app.common.level")} ${nextLevel}` : t("wallet.coreProgress.max")}</span>
+      </div>
+    </section>
+  );
+}
+
 function FinanceState({ title, description }: { title: string; description: string }) {
   return (
     <div className="finance-state">
@@ -852,6 +880,10 @@ function formatDay(value: string, locale: AppLocale): string {
 function parseNumber(value: string): number {
   const parsed = Number(value.replace(",", "."));
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function isValidPercentString(value: string): boolean {

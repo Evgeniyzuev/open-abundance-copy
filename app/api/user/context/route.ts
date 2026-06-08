@@ -7,6 +7,10 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
 
+type CoreContextAccount = Database["public"]["Tables"]["core_accounts"]["Row"] & {
+  next_level_threshold?: number | null;
+};
+
 export async function GET(request: NextRequest) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -46,6 +50,24 @@ export async function GET(request: NextRequest) {
   if (coreResult.error) return NextResponse.json({ error: coreResult.error.message }, { status: 500, headers: NO_STORE_HEADERS });
   if (walletResult.error) return NextResponse.json({ error: walletResult.error.message }, { status: 500, headers: NO_STORE_HEADERS });
 
+  let core: CoreContextAccount | null = coreResult.data;
+  if (core) {
+    const nextThresholdResult = await supabase
+      .from("level_thresholds")
+      .select("core_required")
+      .eq("level", core.level + 1)
+      .maybeSingle();
+
+    if (nextThresholdResult.error) {
+      return NextResponse.json({ error: nextThresholdResult.error.message }, { status: 500, headers: NO_STORE_HEADERS });
+    }
+
+    core = {
+      ...core,
+      next_level_threshold: nextThresholdResult.data?.core_required ?? null
+    };
+  }
+
   return NextResponse.json(
     {
       debug: {
@@ -54,7 +76,7 @@ export async function GET(request: NextRequest) {
       },
       user,
       profile: profileResult.data,
-      core: coreResult.data,
+      core,
       wallet: walletResult.data
     },
     { headers: NO_STORE_HEADERS }
