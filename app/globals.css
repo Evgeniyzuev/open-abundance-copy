@@ -40,10 +40,6 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .placeholder-screen { max-width: 610px; min-height: calc(100vh - 182px); margin: 0 auto; display: grid; place-items: center; }
 .placeholder-screen h1 { margin: 0; color: var(--text); font-size: 30px; }
 .wishes-screen { width: min(100vw, 610px); margin: 0 auto; padding: 0 6px 20px; }
-.wishes-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 4px 14px; }
-.wishes-header span { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
-.wishes-header h1 { margin: 2px 0 0; }
-.wishes-add-button { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: #1f95ff; color: white; box-shadow: 0 8px 18px rgba(31, 149, 255, 0.24); }
 .wish-section { display: grid; gap: 8px; margin-bottom: 22px; }
 .wish-section h2 { margin: 0; padding: 0 4px; font-size: 19px; line-height: 1.2; }
 .wish-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; padding: 0 3px; }

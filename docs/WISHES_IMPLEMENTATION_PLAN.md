@@ -342,6 +342,8 @@ Challenge condition `has_wish` должен проверять:
 
 Статус 2026-06-07: этап 1 реализован в `supabase/migrations/20260607135458_personal_wishes_crud.sql`, `app/api/wishes`, `components/WishesApp.tsx`, `components/AppNavigation.tsx`, `app/globals.css`, `lib/i18n.ts` и `lib/database.types.ts`. Доступны личные желания с созданием, редактированием, выполнением, архивированием и soft-delete; рекомендации показываются как read-only шаблоны. Flow "Добавить себе" из recommended wish, фильтрация уже добавленных recommendations и `has_wish` через серверную таблицу остаются в этапе 2.
 
+Статус 2026-06-08: по UI убрана верхняя шапка экрана Wishes, у recommendations убран badge `template`. Этап 2 реализован в `components/WishesApp.tsx`, `app/api/wishes/route.ts`, `app/api/challenges/check/route.ts` и `lib/i18n.ts`: recommended wish открывает предзаполненную форму "Добавить себе", сохраняется `source_recommended_wish_id`, уже добавленные recommendations фильтруются из API/UI, а challenge `has_wish` проверяет серверные `wishes` со статусом `active` или `completed` и `deleted_at is null`.
+
 ### Этап 2. Recommended -> My Wish
 
 - сделать "Добавить себе" из recommended wish;

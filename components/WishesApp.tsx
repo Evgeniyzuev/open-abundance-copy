@@ -45,6 +45,7 @@ type FormState = {
   targetCurrency: string;
   difficultyLevel: string;
   visibility: WishVisibility;
+  sourceRecommendedWishId: string | null;
 };
 
 const emptyForm: FormState = {
@@ -55,7 +56,8 @@ const emptyForm: FormState = {
   targetAmount: "",
   targetCurrency: "USD",
   difficultyLevel: "1",
-  visibility: "private"
+  visibility: "private",
+  sourceRecommendedWishId: null
 };
 
 export default function WishesApp({ refreshNonce }: WishesAppProps) {
@@ -65,6 +67,7 @@ export default function WishesApp({ refreshNonce }: WishesAppProps) {
   const [selectedWish, setSelectedWish] = useState<SelectedWish | null>(null);
   const [editingWish, setEditingWish] = useState<Wish | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [recommendedDraft, setRecommendedDraft] = useState<RecommendedWish | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "offline" | "unauthenticated" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -135,7 +138,11 @@ export default function WishesApp({ refreshNonce }: WishesAppProps) {
   async function createWish(values: FormState) {
     const wish = await sendWishRequest("/api/wishes", "POST", formToPayload(values));
     setWishes((current) => [wish, ...current]);
+    if (wish.source_recommended_wish_id) {
+      setRecommendedWishes((current) => current.filter((item) => item.id !== wish.source_recommended_wish_id));
+    }
     setIsCreateOpen(false);
+    setRecommendedDraft(null);
   }
 
   async function updateWish(wish: Wish, values: FormState) {
@@ -199,16 +206,6 @@ export default function WishesApp({ refreshNonce }: WishesAppProps) {
 
   return (
     <section className="wishes-screen">
-      <header className="wishes-header">
-        <div>
-          <span>{t("app.nav.desires")}</span>
-          <h1>{t("wishes.title")}</h1>
-        </div>
-        <button className="wishes-add-button" type="button" aria-label={t("wishes.add")} onClick={() => setIsCreateOpen(true)}>
-          <Plus size={22} />
-        </button>
-      </header>
-
       {isRefreshing && wishes.length > 0 ? <div className="wishes-refreshing">{t("wishes.refreshing")}</div> : null}
       {status === "loading" && wishes.length === 0 ? <WishState title={t("app.common.loading")} description={t("wishes.loading.description")} /> : null}
       {status === "offline" && wishes.length === 0 ? <WishState title={t("app.common.offline")} description={t("wishes.offline.description")} /> : null}
@@ -233,7 +230,6 @@ export default function WishesApp({ refreshNonce }: WishesAppProps) {
                 key={wish.id}
                 title={text(wish.title, locale)}
                 imageUrl={wish.image_url}
-                badge={t("wishes.template")}
                 onClick={() => setSelectedWish({ type: "recommended", wish })}
               />
             ))}
@@ -268,6 +264,10 @@ export default function WishesApp({ refreshNonce }: WishesAppProps) {
             setSelectedWish(null);
             setEditingWish(wish);
           }}
+          onUseTemplate={(wish) => {
+            setSelectedWish(null);
+            setRecommendedDraft(wish);
+          }}
           onRestore={(wish) => setWishStatus(wish, "active").catch((detailError) => setErrorMessage(detailError instanceof Error ? detailError.message : t("wishes.error")))}
         />
       ) : null}
@@ -277,6 +277,15 @@ export default function WishesApp({ refreshNonce }: WishesAppProps) {
           title={t("wishes.createTitle")}
           initialState={emptyForm}
           onClose={() => setIsCreateOpen(false)}
+          onSave={createWish}
+        />
+      ) : null}
+
+      {recommendedDraft ? (
+        <WishFormModal
+          title={t("wishes.createTitle")}
+          initialState={recommendedToForm(recommendedDraft, locale)}
+          onClose={() => setRecommendedDraft(null)}
           onSave={createWish}
         />
       ) : null}
@@ -329,6 +338,7 @@ function WishDetailModal({
   onComplete,
   onDelete,
   onEdit,
+  onUseTemplate,
   onRestore,
   selectedWish
 }: {
@@ -338,6 +348,7 @@ function WishDetailModal({
   onComplete: (wish: Wish) => void;
   onDelete: (wish: Wish) => void;
   onEdit: (wish: Wish) => void;
+  onUseTemplate: (wish: RecommendedWish) => void;
   onRestore: (wish: Wish) => void;
 }) {
   const { locale, t } = useUserContext();
@@ -363,7 +374,7 @@ function WishDetailModal({
             {isPersonal && selectedWish.wish.target_amount ? <span>{formatAmount(selectedWish.wish.target_amount, selectedWish.wish.target_currency)}</span> : null}
             {!isPersonal && selectedWish.wish.estimated_cost ? <span>{selectedWish.wish.estimated_cost}</span> : null}
             <span>{t("wishes.level", { level: selectedWish.wish.difficulty_level })}</span>
-            {isPersonal ? <span>{visibilityLabel(selectedWish.wish.visibility, t)}</span> : <span>{t("wishes.template")}</span>}
+            {isPersonal ? <span>{visibilityLabel(selectedWish.wish.visibility, t)}</span> : null}
           </div>
           {isPersonal ? (
             <div className="wish-detail-actions">
@@ -393,7 +404,12 @@ function WishDetailModal({
                 {t("app.common.delete")}
               </button>
             </div>
-          ) : null}
+          ) : (
+            <button className="task-done-primary-button" type="button" onClick={() => onUseTemplate(selectedWish.wish)}>
+              <Plus size={16} />
+              {t("wishes.addToMine")}
+            </button>
+          )}
         </div>
       </section>
     </div>
@@ -518,7 +534,8 @@ function formToPayload(form: FormState) {
     targetAmount: form.targetAmount,
     targetCurrency: form.targetCurrency,
     difficultyLevel: form.difficultyLevel,
-    visibility: form.visibility
+    visibility: form.visibility,
+    sourceRecommendedWishId: form.sourceRecommendedWishId
   };
 }
 
@@ -531,8 +548,29 @@ function wishToForm(wish: Wish): FormState {
     targetAmount: wish.target_amount === null ? "" : String(wish.target_amount),
     targetCurrency: wish.target_currency,
     difficultyLevel: String(wish.difficulty_level),
-    visibility: wish.visibility
+    visibility: wish.visibility,
+    sourceRecommendedWishId: wish.source_recommended_wish_id
   };
+}
+
+function recommendedToForm(wish: RecommendedWish, locale: AppLocale): FormState {
+  return {
+    title: text(wish.title, locale),
+    description: text(wish.description, locale),
+    category: wish.category ?? "",
+    imageUrl: wish.image_url ?? "",
+    targetAmount: estimatedCostToAmount(wish.estimated_cost),
+    targetCurrency: "USD",
+    difficultyLevel: String(wish.difficulty_level),
+    visibility: "private",
+    sourceRecommendedWishId: wish.id
+  };
+}
+
+function estimatedCostToAmount(value: string | null): string {
+  if (!value) return "";
+  const match = value.replace(/\s/g, "").match(/(\d+(?:[.,]\d+)?)/);
+  return match ? match[1].replace(",", ".") : "";
 }
 
 function text(value: LocaleText, locale: AppLocale): string {

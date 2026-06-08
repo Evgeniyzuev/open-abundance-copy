@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { TablesInsert } from "@/lib/database.types";
+import type { Tables, TablesInsert } from "@/lib/database.types";
 import { NO_STORE_HEADERS } from "@/lib/httpCache";
 import { getAuthenticatedUser } from "@/lib/serverSupabase";
 
@@ -69,10 +69,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: recommendedResult.error.message }, { status: 500, headers: NO_STORE_HEADERS });
     }
 
+    const addedRecommendedWishIds = new Set(
+      (wishesResult.data ?? [])
+        .map((wish) => wish.source_recommended_wish_id)
+        .filter((id): id is string => Boolean(id))
+    );
+
+    const recommendedWishes = (recommendedResult.data ?? []).filter((wish) => !addedRecommendedWishIds.has(wish.id));
+
     return NextResponse.json(
       {
         wishes: wishesResult.data ?? [],
-        recommendedWishes: recommendedResult.data ?? []
+        recommendedWishes
       },
       { headers: NO_STORE_HEADERS }
     );
@@ -97,6 +105,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Wish title is required." }, { status: 400, headers: NO_STORE_HEADERS });
     }
 
+    const sourceRecommendedWishId = normalizeUuid(body.sourceRecommendedWishId ?? body.source_recommended_wish_id);
+    if (sourceRecommendedWishId) {
+      const existingWish = await findExistingRecommendedWishCopy(supabase, user.id, sourceRecommendedWishId);
+      if (existingWish.error) {
+        return NextResponse.json({ error: existingWish.error }, { status: 500, headers: NO_STORE_HEADERS });
+      }
+
+      if (existingWish.wish) {
+        return NextResponse.json({ wish: existingWish.wish, alreadyAdded: true }, { headers: NO_STORE_HEADERS });
+      }
+    }
+
     const row: TablesInsert<"wishes"> = {
       owner_user_id: user.id,
       title,
@@ -107,7 +127,7 @@ export async function POST(request: NextRequest) {
       target_currency: normalizeCurrency(body.targetCurrency ?? body.target_currency),
       difficulty_level: normalizeDifficulty(body.difficultyLevel ?? body.difficulty_level),
       visibility: normalizeVisibility(body.visibility),
-      source_recommended_wish_id: normalizeUuid(body.sourceRecommendedWishId ?? body.source_recommended_wish_id)
+      source_recommended_wish_id: sourceRecommendedWishId
     };
 
     const { data, error: insertError } = await supabase
@@ -180,4 +200,22 @@ async function readJsonBody(request: NextRequest): Promise<WishPostBody> {
   } catch {
     return {};
   }
+}
+
+async function findExistingRecommendedWishCopy(
+  supabase: Awaited<ReturnType<typeof getAuthenticatedUser>>["supabase"],
+  userId: string,
+  sourceRecommendedWishId: string
+): Promise<{ wish: Tables<"wishes"> | null; error?: string }> {
+  const { data, error } = await supabase
+    .from("wishes")
+    .select("*")
+    .eq("owner_user_id", userId)
+    .eq("source_recommended_wish_id", sourceRecommendedWishId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (error) return { wish: null, error: error.message };
+  return { wish: data?.[0] ?? null };
 }

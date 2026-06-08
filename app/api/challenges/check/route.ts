@@ -162,6 +162,26 @@ async function verifyChallenge(
     return { ok: false, reason: "Use the Core calculator first, then check this challenge." };
   }
 
+  if (challenge.verification_logic === "has_wish") {
+    const { data, error } = await supabase
+      .from("wishes")
+      .select("id")
+      .eq("owner_user_id", userId)
+      .is("deleted_at", null)
+      .in("status", ["active", "completed"])
+      .limit(1);
+
+    if (error) {
+      return { ok: false, reason: "Could not check wishes. Try again." };
+    }
+
+    if ((data ?? []).length > 0) {
+      return { ok: true };
+    }
+
+    return { ok: false, reason: "Create a wish first, then check this challenge." };
+  }
+
   return { ok: false, reason: "Verification is not connected for this challenge yet." };
 }
 
