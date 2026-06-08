@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Calculator, Check, ChevronDown, ChevronUp, RefreshCw, RotateCcw, TrendingUp } from "lucide-react";
+import { Calculator, Check, ChevronDown, ChevronUp, RotateCcw, TrendingUp } from "lucide-react";
 import { type CoreAccount, useUserContext } from "@/components/UserProvider";
 import { calculateDailyIncome, calculateFutureCore, coreRequiredForDailyIncome, daysFromTerm, findDaysToTarget, formatDurationParts, normalizePercent } from "@/lib/coreCalculator";
-import type { AppLocale } from "@/lib/i18n";
+import type { AppLocale, MessageKey } from "@/lib/i18n";
 import { formatAdaptiveMoney, formatMoney } from "@/lib/moneyFormat";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
 
@@ -37,9 +37,10 @@ type ChallengeProgressResponse = {
 type CalculatorMode = "future" | "target";
 type TargetKind = "core" | "daily";
 type TermUnit = "days" | "months" | "years";
+type TFunction = (key: MessageKey, values?: Record<string, string | number>) => string;
 
 export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { activeTab: WalletTab; refreshNonce: number; onRefresh: () => Promise<void> }) {
-  const { core, wallet, user, loading, refreshing, error, locale, applyServerData, t } = useUserContext();
+  const { core, wallet, user, loading, error, locale, applyServerData, t } = useUserContext();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyRows, setHistoryRows] = useState<CoreAccrualRow[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -254,8 +255,8 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
   const futureDailyIncome = calculateDailyIncome(futureCore, simulation.reinvestPercent);
   const requestedTargetCore = targetKind === "daily" ? coreRequiredForDailyIncome(parseNumber(targetDailyIncome)) : parseNumber(targetCore);
   const targetCalculation = findDaysToTarget({ ...simulation, days: 0, targetCore: requestedTargetCore });
-  const summaryGoalLabel = calculatorMode === "target" ? formatTargetSummary(targetCalculation, locale) : formatMoney(futureCore, locale);
-  const summaryDailyLabel = calculatorMode === "target" ? formatMoney(requestedTargetCore, locale) : `${formatMoney(futureDailyIncome.gross, locale)}/${locale === "ru" ? "день" : "day"}`;
+  const summaryGoalLabel = calculatorMode === "target" ? formatTargetSummary(targetCalculation, t) : formatMoney(futureCore, locale);
+  const summaryDailyLabel = calculatorMode === "target" ? formatMoney(requestedTargetCore, locale) : `${formatMoney(futureDailyIncome.gross, locale)}/${t("app.common.day")}`;
 
   return (
     <section className="finance-screen">
@@ -266,7 +267,7 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
       {user && activeTab === "wallet" ? (
         <>
           <BalancePanel
-            title="Wallet"
+            title={t("wallet.wallet")}
             label={t("wallet.availableBalance")}
             amount={wallet?.balance ?? 0}
             locale={locale}
@@ -274,11 +275,11 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
             adaptiveAmount
           />
           <HistoryPanel
-            title={locale === "ru" ? "История Wallet" : "Wallet history"}
+            title={t("wallet.history.wallet")}
             open={walletHistoryOpen}
             loading={walletHistoryLoading}
             error={walletHistoryError}
-            emptyText={locale === "ru" ? "Операций пока нет." : "No operations yet."}
+            emptyText={t("wallet.history.empty")}
             loadingText={t("app.common.loading")}
             rowCount={walletHistoryRows?.length ?? 0}
             onToggle={toggleWalletHistory}
@@ -288,13 +289,13 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
                 <article className="payout-row" key={row.id}>
                   <div>
                     <strong>{formatDay(row.operation_date, locale)}</strong>
-                    <span>{locale === "ru" ? "Daily Core payout" : "Daily Core payout"}</span>
+                    <span>{t("wallet.history.dailyCorePayout")}</span>
                   </div>
                   <div>
                     <strong>+{formatAdaptiveMoney(row.amount, locale)}</strong>
-                    <span>Wallet</span>
+                    <span>{t("wallet.wallet")}</span>
                   </div>
-                  <p>{`${locale === "ru" ? "Daily rate" : "Daily rate"} ${formatPercent(row.daily_rate * 100, locale)} · ${locale === "ru" ? "Реинвест" : "Reinvest"} ${formatPercentCompact(row.reinvest_percent, locale)}`}</p>
+                  <p>{`${t("wallet.dailyRate")} ${formatPercent(row.daily_rate * 100, locale)} · ${t("wallet.reinvest")} ${formatPercentCompact(row.reinvest_percent, locale)}`}</p>
                 </article>
               ))}
             </div>
@@ -305,7 +306,7 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
       {user && activeTab === "core" ? (
         <>
           <BalancePanel
-            title="Core"
+            title={t("wallet.core")}
             label={t("wallet.core")}
             amount={core?.balance ?? 0}
             locale={locale}
@@ -322,6 +323,7 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
             saving={reinvestSaving}
             error={reinvestError}
             locale={locale}
+            t={t}
             onChange={updateReinvestDraft}
             onReset={resetReinvestPercent}
             onSave={saveReinvestPercent}
@@ -345,6 +347,7 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
             summaryGoalLabel={summaryGoalLabel}
             summaryDailyLabel={summaryDailyLabel}
             locale={locale}
+            t={t}
             onToggle={() => setCalculatorOpen((open) => !open)}
             onModeChange={setCalculatorMode}
             onTargetKindChange={setTargetKind}
@@ -375,11 +378,11 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
             }}
           />
           <HistoryPanel
-            title={locale === "ru" ? "История Core" : "Core history"}
+            title={t("wallet.history.core")}
             open={historyOpen}
             loading={historyLoading}
             error={historyError}
-            emptyText={locale === "ru" ? "Начислений пока нет." : "No payouts yet."}
+            emptyText={t("wallet.history.coreEmpty")}
             loadingText={t("app.common.loading")}
             rowCount={historyRows?.length ?? 0}
             onToggle={toggleCoreHistory}
@@ -389,13 +392,13 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
                 <article className="payout-row" key={`${row.accrual_date}-${row.created_at}`}>
                   <div>
                     <strong>{formatDay(row.accrual_date, locale)}</strong>
-                    <span>{locale === "ru" ? "Daily rate" : "Daily rate"} {formatPercent(row.daily_rate * 100, locale)}</span>
+                    <span>{t("wallet.dailyRate")} {formatPercent(row.daily_rate * 100, locale)}</span>
                   </div>
                   <div>
                     <strong>+{formatAdaptiveMoney(row.core_amount, locale)}</strong>
-                    <span>{locale === "ru" ? "Core" : "to Core"}</span>
+                    <span>{t("wallet.toCore")}</span>
                   </div>
-                  <p>{`${formatAdaptiveMoney(row.core_before, locale)} -> ${formatAdaptiveMoney(row.core_after, locale)} · Wallet +${formatAdaptiveMoney(row.wallet_amount, locale)}`}</p>
+                  <p>{`${formatAdaptiveMoney(row.core_before, locale)} -> ${formatAdaptiveMoney(row.core_after, locale)} · ${t("wallet.wallet")} +${formatAdaptiveMoney(row.wallet_amount, locale)}`}</p>
                 </article>
               ))}
             </div>
@@ -456,6 +459,7 @@ function ReinvestPanel({
   saving,
   error,
   locale,
+  t,
   onChange,
   onReset,
   onSave
@@ -468,6 +472,7 @@ function ReinvestPanel({
   saving: boolean;
   error: string | null;
   locale: AppLocale;
+  t: TFunction;
   onChange: (value: string) => void;
   onReset: () => void;
   onSave: () => void;
@@ -478,16 +483,16 @@ function ReinvestPanel({
     <section className="core-tool-panel reinvest-panel">
       <div className="core-tool-heading">
         <div>
-          <span>{locale === "ru" ? "Реинвест" : "Reinvest"}</span>
-          <strong>{formatPercentCompact(percent, locale)} {locale === "ru" ? "в Core" : "to Core"}</strong>
+          <span>{t("wallet.reinvest")}</span>
+          <strong>{formatPercentCompact(percent, locale)} {t("wallet.toCore")}</strong>
         </div>
         <div className="reinvest-actions">
           {changed ? (
-            <button className="finance-small-icon-button" type="button" aria-label={locale === "ru" ? "Сбросить" : "Reset"} disabled={saving} onClick={onReset}>
+            <button className="finance-small-icon-button" type="button" aria-label={t("app.common.reset")} disabled={saving} onClick={onReset}>
               <RotateCcw size={16} />
             </button>
           ) : null}
-          <button className="finance-small-icon-button primary" type="button" aria-label={locale === "ru" ? "Сохранить" : "Save"} disabled={!changed || !valid || saving} onClick={onSave}>
+          <button className="finance-small-icon-button primary" type="button" aria-label={t("app.common.save")} disabled={!changed || !valid || saving} onClick={onSave}>
             <Check size={17} />
           </button>
         </div>
@@ -503,7 +508,7 @@ function ReinvestPanel({
           inputMode="decimal"
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          aria-label={locale === "ru" ? "Процент реинвеста" : "Reinvest percent"}
+          aria-label={t("wallet.reinvest.percent")}
         />
         <span>%</span>
         <input
@@ -514,19 +519,19 @@ function ReinvestPanel({
           step="1"
           value={valid ? String(Math.round(percent)) : String(Math.round(savedPercent))}
           onChange={(event) => onChange(event.target.value)}
-          aria-label={locale === "ru" ? "Ползунок реинвеста" : "Reinvest slider"}
+          aria-label={t("wallet.reinvest.slider")}
         />
       </div>
 
       <div className="reinvest-split">
         <span>
           <TrendingUp size={15} />
-          Core +{formatAdaptiveMoney(dailyIncome.toCore, locale)}
+          {t("wallet.core")} +{formatAdaptiveMoney(dailyIncome.toCore, locale)}
         </span>
-        <span>Wallet +{formatAdaptiveMoney(dailyIncome.toWallet, locale)}</span>
+        <span>{t("wallet.wallet")} +{formatAdaptiveMoney(dailyIncome.toWallet, locale)}</span>
       </div>
 
-      {!valid ? <p className="finance-error inline">{locale === "ru" ? "Введите число от 0 до 100." : "Enter a number from 0 to 100."}</p> : null}
+      {!valid ? <p className="finance-error inline">{t("wallet.reinvest.invalidPercent")}</p> : null}
       {error ? <p className="finance-error inline">{error}</p> : null}
     </section>
   );
@@ -551,6 +556,7 @@ function CoreCalculatorPanel({
   summaryGoalLabel,
   summaryDailyLabel,
   locale,
+  t,
   onToggle,
   onModeChange,
   onTargetKindChange,
@@ -583,6 +589,7 @@ function CoreCalculatorPanel({
   summaryGoalLabel: string;
   summaryDailyLabel: string;
   locale: AppLocale;
+  t: TFunction;
   onToggle: () => void;
   onModeChange: (mode: CalculatorMode) => void;
   onTargetKindChange: (kind: TargetKind) => void;
@@ -606,15 +613,15 @@ function CoreCalculatorPanel({
       <button className="calculator-summary" type="button" onClick={onToggle}>
         <span className="calculator-title">
           <Calculator size={18} />
-          {locale === "ru" ? "Калькулятор роста" : "Growth calculator"}
+          {t("wallet.calculator.title")}
         </span>
         <span className="calculator-metrics">
           <span>
-            <small>{mode === "target" ? (locale === "ru" ? "Цель" : "Goal") : (locale === "ru" ? "Будущий Core" : "Future Core")}</small>
+            <small>{mode === "target" ? t("wallet.calculator.goal") : t("wallet.calculator.futureCore")}</small>
             <strong>{summaryGoalLabel}</strong>
           </span>
           <span>
-            <small>{mode === "target" ? (locale === "ru" ? "Core нужен" : "Required Core") : (locale === "ru" ? "Доход" : "Daily")}</small>
+            <small>{mode === "target" ? t("wallet.calculator.requiredCore") : t("wallet.calculator.daily")}</small>
             <strong>{summaryDailyLabel}</strong>
           </span>
         </span>
@@ -625,45 +632,45 @@ function CoreCalculatorPanel({
         <div className="calculator-body">
           <div className="finance-segmented compact">
             <button className={mode === "future" ? "active" : ""} type="button" onClick={() => onModeChange("future")}>
-              {locale === "ru" ? "Сумма через срок" : "Future amount"}
+              {t("wallet.calculator.futureAmount")}
             </button>
             <button className={mode === "target" ? "active" : ""} type="button" onClick={() => onModeChange("target")}>
-              {locale === "ru" ? "Срок до цели" : "Time to goal"}
+              {t("wallet.calculator.timeToGoal")}
             </button>
           </div>
 
           <div className="calculator-grid">
             <div className="calculator-fields">
               <label className="finance-field">
-                <span>{locale === "ru" ? "Начальный Core" : "Start Core"}</span>
+                <span>{t("wallet.calculator.startCore")}</span>
                 <input type="number" min="0" inputMode="decimal" value={startCore} onChange={(event) => onStartCoreChange(event.target.value)} />
               </label>
 
               <label className="finance-check-row">
                 <input type="checkbox" checked={useCurrentCore} onChange={(event) => onUseCurrentCoreChange(event.target.checked)} />
-                <span>{locale === "ru" ? "Использовать текущий Core" : "Use current Core"}</span>
+                <span>{t("wallet.calculator.useCurrentCore")}</span>
               </label>
 
               <label className="finance-field">
-                <span>{locale === "ru" ? "Ежедневный прирост/Доход от челленджей" : "Daily additions/Challenge income"}</span>
+                <span>{t("wallet.calculator.dailyAdditions")}</span>
                 <input type="number" min="0" inputMode="decimal" value={dailyAdditions} onChange={(event) => onDailyAdditionsChange(event.target.value)} />
               </label>
 
               <label className="finance-field">
-                <span>{locale === "ru" ? "Реинвест в сценарии" : "Scenario reinvest"}</span>
+                <span>{t("wallet.calculator.scenarioReinvest")}</span>
                 <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={simulationReinvest} onChange={(event) => onSimulationReinvestChange(event.target.value)} />
               </label>
 
               {mode === "future" ? (
                 <div className="term-row">
                   <label className="finance-field">
-                    <span>{locale === "ru" ? "Срок" : "Term"}</span>
+                    <span>{t("wallet.calculator.term")}</span>
                     <input type="number" min="0" inputMode="decimal" value={termValue} onChange={(event) => onTermValueChange(event.target.value)} />
                   </label>
                   <div className="finance-segmented small">
                     {(["days", "months", "years"] as TermUnit[]).map((unit) => (
                       <button className={termUnit === unit ? "active" : ""} type="button" key={unit} onClick={() => onTermUnitChange(unit)}>
-                        {unitLabel(unit, locale)}
+                        {unitLabel(unit, t)}
                       </button>
                     ))}
                   </div>
@@ -675,22 +682,22 @@ function CoreCalculatorPanel({
                       Core
                     </button>
                     <button className={targetKind === "daily" ? "active" : ""} type="button" onClick={() => onTargetKindChange("daily")}>
-                      {locale === "ru" ? "Доход/день" : "Daily income"}
+                      {t("wallet.calculator.dailyIncomeShort")}
                     </button>
                   </div>
                   {targetKind === "core" ? (
                     <label className="finance-field">
-                      <span>{locale === "ru" ? "Желаемый Core" : "Goal Core"}</span>
+                      <span>{t("wallet.calculator.goalCore")}</span>
                       <input type="number" min="0" inputMode="decimal" value={targetCore} onChange={(event) => onTargetCoreChange(event.target.value)} />
                     </label>
                   ) : (
                     <label className="finance-field">
-                      <span>{locale === "ru" ? "Желаемый доход в день" : "Goal daily income"}</span>
+                      <span>{t("wallet.calculator.goalDailyIncome")}</span>
                       <input type="number" min="0" inputMode="decimal" value={targetDailyIncome} onChange={(event) => onTargetDailyIncomeChange(event.target.value)} />
                     </label>
                   )}
                   <button className="challenge-primary-action calculator-action" type="button" onClick={onCalculateTarget}>
-                    {locale === "ru" ? "Рассчитать срок" : "Calculate time"}
+                    {t("wallet.calculator.calculateTime")}
                   </button>
                 </>
               )}
@@ -699,16 +706,16 @@ function CoreCalculatorPanel({
             <div className="calculator-results">
               {mode === "future" ? (
                 <>
-                  <MetricRow label={locale === "ru" ? "Будущий Core" : "Future Core"} value={formatMoney(futureCore, locale)} strong />
-                  <MetricRow label={locale === "ru" ? "Доход в день" : "Daily income"} value={`${formatMoney(futureDailyIncome.gross, locale)}/${locale === "ru" ? "день" : "day"}`} />
-                  <MetricRow label={locale === "ru" ? "Добавлено вручную" : "Added manually"} value={formatMoney(manualAdded, locale)} />
-                  <MetricRow label={locale === "ru" ? "Рост от реинвеста" : "Reinvest growth"} value={formatMoney(reinvestGrowth, locale)} />
+                  <MetricRow label={t("wallet.calculator.futureCore")} value={formatMoney(futureCore, locale)} strong />
+                  <MetricRow label={t("wallet.calculator.dailyIncome")} value={`${formatMoney(futureDailyIncome.gross, locale)}/${t("app.common.day")}`} />
+                  <MetricRow label={t("wallet.calculator.addedManually")} value={formatMoney(manualAdded, locale)} />
+                  <MetricRow label={t("wallet.calculator.reinvestGrowth")} value={formatMoney(reinvestGrowth, locale)} />
                 </>
               ) : (
                 <>
-                  <MetricRow label={locale === "ru" ? "Нужный Core" : "Required Core"} value={formatMoney(requestedTargetCore, locale)} strong />
-                  {targetReady ? <TargetResult calculation={targetCalculation} locale={locale} /> : (
-                    <p className="calculator-hint">{locale === "ru" ? "Задайте цель и нажмите расчет." : "Set a target and calculate the timeline."}</p>
+                  <MetricRow label={t("wallet.calculator.requiredCore")} value={formatMoney(requestedTargetCore, locale)} strong />
+                  {targetReady ? <TargetResult calculation={targetCalculation} locale={locale} t={t} /> : (
+                    <p className="calculator-hint">{t("wallet.calculator.targetHint")}</p>
                   )}
                 </>
               )}
@@ -729,23 +736,23 @@ function MetricRow({ label, value, strong }: { label: string; value: string; str
   );
 }
 
-function TargetResult({ calculation, locale }: { calculation: ReturnType<typeof findDaysToTarget>; locale: AppLocale }) {
+function TargetResult({ calculation, locale, t }: { calculation: ReturnType<typeof findDaysToTarget>; locale: AppLocale; t: TFunction }) {
   if (calculation.kind === "reached") {
-    return <MetricRow label={locale === "ru" ? "Срок" : "Time"} value={locale === "ru" ? "Уже достигнуто" : "Already reached"} strong />;
+    return <MetricRow label={t("wallet.calculator.time")} value={t("wallet.calculator.alreadyReached")} strong />;
   }
 
   if (calculation.kind === "unreachable") {
-    return <p className="calculator-hint">{locale === "ru" ? "Цель недостижима без ежедневного прироста или реинвеста." : "This target needs daily additions or reinvest to become reachable."}</p>;
+    return <p className="calculator-hint">{t("wallet.calculator.unreachableHint")}</p>;
   }
 
   if (calculation.kind === "beyond-range") {
-    return <p className="calculator-hint">{locale === "ru" ? "Больше 100 лет с текущими параметрами." : "More than 100 years with current settings."}</p>;
+    return <p className="calculator-hint">{t("wallet.calculator.beyondRangeHint")}</p>;
   }
 
   return (
     <>
-      <MetricRow label={locale === "ru" ? "Срок" : "Time"} value={formatDuration(calculation.days, locale)} strong />
-      <MetricRow label={locale === "ru" ? "Дата цели" : "Target date"} value={formatTargetDate(calculation.days, locale)} />
+      <MetricRow label={t("wallet.calculator.time")} value={formatDuration(calculation.days, t)} strong />
+      <MetricRow label={t("wallet.calculator.targetDate")} value={formatTargetDate(calculation.days, locale)} />
     </>
   );
 }
@@ -822,7 +829,7 @@ function CoreLevelProgress({
 }: {
   core: CoreAccount;
   locale: AppLocale;
-  t: (key: "app.common.level" | "wallet.coreProgress.aria" | "wallet.coreProgress.max", values?: Record<string, string | number>) => string;
+  t: TFunction;
 }) {
   const threshold = Number.isFinite(core.next_level_threshold ?? NaN) && (core.next_level_threshold ?? 0) > 0 ? core.next_level_threshold ?? null : null;
   const progress = threshold ? clamp((core.balance / threshold) * 100, 0, 100) : 100;
@@ -897,22 +904,22 @@ function formatInputNumber(value: number): string {
   return String(Math.round(value * 100) / 100);
 }
 
-function unitLabel(unit: TermUnit, locale: AppLocale): string {
-  if (unit === "days") return locale === "ru" ? "дни" : "days";
-  if (unit === "months") return locale === "ru" ? "мес" : "mo";
-  return locale === "ru" ? "годы" : "yr";
+function unitLabel(unit: TermUnit, t: TFunction): string {
+  if (unit === "days") return t("app.common.days");
+  if (unit === "months") return t("app.common.months.short");
+  return t("app.common.years");
 }
 
-function formatDuration(days: number, locale: AppLocale): string {
+function formatDuration(days: number, t: TFunction): string {
   const parts = formatDurationParts(days);
   if (parts.years <= 0 && parts.months <= 1) {
-    return `${Math.max(1, Math.round(days))} ${locale === "ru" ? "дн." : "days"}`;
+    return `${Math.max(1, Math.round(days))} ${t("app.common.days.short")}`;
   }
 
   const values: string[] = [];
-  if (parts.years > 0) values.push(`${parts.years} ${locale === "ru" ? "г." : "y"}`);
-  if (parts.months > 0) values.push(`${parts.months} ${locale === "ru" ? "мес." : "mo"}`);
-  if (values.length === 0 && parts.days > 0) values.push(`${parts.days} ${locale === "ru" ? "дн." : "d"}`);
+  if (parts.years > 0) values.push(`${parts.years} ${t("app.common.years.short")}`);
+  if (parts.months > 0) values.push(`${parts.months} ${t("app.common.months.short")}`);
+  if (values.length === 0 && parts.days > 0) values.push(`${parts.days} ${t("app.common.days.short")}`);
   return values.join(" ");
 }
 
@@ -921,9 +928,9 @@ function formatTargetDate(days: number, locale: AppLocale): string {
   return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
-function formatTargetSummary(calculation: ReturnType<typeof findDaysToTarget>, locale: AppLocale): string {
-  if (calculation.kind === "reached") return locale === "ru" ? "Уже достигнуто" : "Reached";
-  if (calculation.kind === "unreachable") return locale === "ru" ? "Недостижимо" : "Unreachable";
-  if (calculation.kind === "beyond-range") return locale === "ru" ? ">100 лет" : ">100 years";
-  return formatDuration(calculation.days, locale);
+function formatTargetSummary(calculation: ReturnType<typeof findDaysToTarget>, t: TFunction): string {
+  if (calculation.kind === "reached") return t("wallet.calculator.reached");
+  if (calculation.kind === "unreachable") return t("wallet.calculator.unreachable");
+  if (calculation.kind === "beyond-range") return t("wallet.calculator.beyondRange");
+  return formatDuration(calculation.days, t);
 }

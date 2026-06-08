@@ -6,6 +6,16 @@ At the start of any coding task in this repository, read this file unless it is 
 
 Do this even if the user does not mention the file in the request.
 
+## Context And Verification Efficiency
+
+For small, localized changes, gather context with targeted searches before reading large files end to end.
+
+- start with `rg` or `Select-String` for the component, symbol, route, table, or CSS class that is directly involved;
+- read full files only when the targeted search does not reveal the needed structure or when the change touches broad behavior;
+- avoid repeating equivalent searches after the relevant owner, schema, or style block is found;
+- scale verification to risk: run `pnpm exec tsc --noEmit` for TypeScript/UI contract changes, add `pnpm lint` or broader checks when the change touches shared patterns or lint-sensitive code;
+- after a frontend change, attempt the in-app browser once as described below; if it is unavailable with a known environment error, switch to the fallback checks instead of spending time on repeated browser setup attempts.
+
 ## UTF-8 And PowerShell
 
 Most source files in this project are UTF-8 and contain Russian UI text.
