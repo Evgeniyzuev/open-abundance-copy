@@ -27,6 +27,39 @@ type WishPatchBody = {
   status?: unknown;
 };
 
+export async function GET(request: NextRequest, { params }: { params: { wishId: string } }) {
+  try {
+    const wishId = normalizeUuid(params.wishId);
+    if (!wishId) {
+      return NextResponse.json({ error: "Invalid wish id." }, { status: 400, headers: NO_STORE_HEADERS });
+    }
+
+    const { supabase, user, error } = await getAuthenticatedUser(request);
+    if (error || !user) {
+      return NextResponse.json({ error }, { status: 401, headers: NO_STORE_HEADERS });
+    }
+
+    const { data: wish, error: wishError } = await supabase
+      .from("wishes")
+      .select("*")
+      .eq("id", wishId)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (wishError) return NextResponse.json({ error: wishError.message }, { status: 500, headers: NO_STORE_HEADERS });
+    if (!wish || !canReadWish(wish as WishRow, user.id)) {
+      return NextResponse.json({ error: "Wish not found." }, { status: 404, headers: NO_STORE_HEADERS });
+    }
+
+    return NextResponse.json({ wish }, { headers: NO_STORE_HEADERS });
+  } catch (routeError) {
+    return NextResponse.json(
+      { error: routeError instanceof Error ? routeError.message : "Failed to load wish." },
+      { status: 500, headers: NO_STORE_HEADERS }
+    );
+  }
+}
+
 export async function PATCH(request: NextRequest, { params }: { params: { wishId: string } }) {
   try {
     const wishId = normalizeUuid(params.wishId);
@@ -107,6 +140,11 @@ export async function DELETE(request: NextRequest, { params }: { params: { wishI
       { status: 500, headers: NO_STORE_HEADERS }
     );
   }
+}
+
+function canReadWish(wish: WishRow, viewerUserId: string): boolean {
+  if (wish.owner_user_id === viewerUserId) return true;
+  return wish.visibility === "public" && (wish.status === "active" || wish.status === "completed");
 }
 
 function normalizePatch(body: WishPatchBody, currentWish: WishRow): TablesUpdate<"wishes"> | null {

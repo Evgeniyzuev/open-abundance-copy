@@ -208,6 +208,17 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .visibility-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .profile-links { display: flex; flex-wrap: wrap; gap: 7px; }
 .profile-links a { min-height: 32px; max-width: 100%; display: inline-flex; align-items: center; gap: 6px; overflow: hidden; border-radius: 999px; padding: 0 10px; background: #eef6ff; color: var(--blue); font-size: 13px; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
+.public-wishes-panel { width: 100%; display: grid; gap: 9px; margin-top: 10px; text-align: left; }
+.public-wishes-panel h3 { margin: 0; color: var(--muted); font-size: 12px; font-weight: 850; text-transform: uppercase; }
+.public-wish-list { display: grid; gap: 8px; }
+.public-wish-card { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 9px; align-items: start; border-radius: 10px; padding: 8px; background: #f7f8fb; }
+.public-wish-card > img, .public-wish-placeholder { width: 58px; height: 58px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; object-fit: cover; background: #eef6ff; color: var(--blue); font-size: 24px; font-weight: 900; }
+.public-wish-card > div { min-width: 0; display: grid; gap: 4px; }
+.public-wish-card strong { overflow-wrap: anywhere; font-size: 15px; line-height: 1.16; }
+.public-wish-card p { display: -webkit-box; overflow: hidden; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.public-wish-card .secondary-button { grid-column: 1 / -1; min-height: 36px; border-radius: 10px; font-size: 13px; }
+.public-wish-meta { display: flex; flex-wrap: wrap; gap: 5px; }
+.public-wish-meta span { min-height: 24px; display: inline-flex; align-items: center; border-radius: 999px; padding: 0 8px; background: #eef6ff; color: var(--blue); font-size: 11px; font-weight: 850; }
 .contact-list { display: grid; gap: 7px; }
 .contact-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; border-radius: 10px; padding: 8px; background: var(--surface); box-shadow: 0 8px 18px rgba(25,25,35,0.05); }
 .contact-row > button:first-child { min-width: 0; display: grid; gap: 2px; background: transparent; color: var(--text); text-align: left; }

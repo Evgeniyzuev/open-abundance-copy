@@ -83,9 +83,31 @@ type PublicProfilePayload = {
     created_at: string;
   };
   links: ProfileLinkRow[];
+  publicWishes: PublicWish[];
   relation: { isSelf: boolean; isContact: boolean; isTeam: boolean; isFollower: boolean };
   visibleBlocks: Record<string, boolean>;
   error?: string;
+};
+type PublicWish = {
+  id: string;
+  owner_user_id: string;
+  title: string;
+  description: string;
+  category: string | null;
+  image_url: string | null;
+  target_amount: number | null;
+  target_currency: string;
+  difficulty_level: number;
+  status: string;
+  visibility: string;
+  cloned_from_wish_id: string | null;
+  original_wish_id: string | null;
+  copied_count: number;
+  completed_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  viewer_has_copy: boolean;
 };
 type FeedStatBlock = {
   id: string;
@@ -169,6 +191,7 @@ export default function SocialApp({
   const [profileSaving, setProfileSaving] = useState(false);
   const [publicProfile, setPublicProfile] = useState<PublicProfilePayload | null>(null);
   const [publicProfileLoading, setPublicProfileLoading] = useState(false);
+  const [copyingWishId, setCopyingWishId] = useState<string | null>(null);
   const [contactSavingId, setContactSavingId] = useState<string | null>(null);
   const [feedPayload, setFeedPayload] = useState<FeedPayload | null>(null);
   const [blogPayload, setBlogPayload] = useState<FeedPayload | null>(null);
@@ -197,6 +220,7 @@ export default function SocialApp({
     setProfileSaving(false);
     setPublicProfile(null);
     setPublicProfileLoading(false);
+    setCopyingWishId(null);
     setContactSavingId(null);
     setFeedPayload(null);
     setBlogPayload(null);
@@ -410,6 +434,43 @@ export default function SocialApp({
       setSocialError(profileError instanceof Error ? profileError.message : "Failed to load profile.");
     } finally {
       setPublicProfileLoading(false);
+    }
+  }
+
+  async function copyPublicWishToMine(wish: PublicWish) {
+    setCopyingWishId(wish.id);
+    setSocialError(null);
+    try {
+      const token = await getAccessToken();
+      const response = await fetch(`/api/wishes/${wish.id}/copy`, {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({})
+      });
+      const payload = (await response.json()) as { wish?: PublicWish; alreadyCopied?: boolean; error?: string };
+      if (!response.ok || payload.error || !payload.wish) throw new Error(payload.error ?? "Failed to copy wish.");
+
+      setPublicProfile((current) => current
+        ? {
+            ...current,
+            publicWishes: current.publicWishes.map((item) => item.id === wish.id
+              ? {
+                  ...item,
+                  viewer_has_copy: true,
+                  copied_count: item.copied_count + (payload.alreadyCopied ? 0 : 1)
+                }
+              : item)
+          }
+        : current);
+    } catch (copyError) {
+      console.warn("Public wish copy failed", copyError);
+      setSocialError(copyError instanceof Error ? copyError.message : "Failed to copy wish.");
+    } finally {
+      setCopyingWishId(null);
     }
   }
 
@@ -929,6 +990,16 @@ export default function SocialApp({
                 ))}
               </div>
             ) : null}
+            {publicProfile.publicWishes.length ? (
+              <PublicWishesPanel
+                copyingWishId={copyingWishId}
+                isSelf={publicProfile.relation.isSelf}
+                locale={locale}
+                t={t}
+                wishes={publicProfile.publicWishes}
+                onCopy={copyPublicWishToMine}
+              />
+            ) : null}
           </section>
         </div>
       ) : null}
@@ -944,6 +1015,56 @@ export default function SocialApp({
           onOpenBlog={openAuthorBlog}
         />
       ) : null}
+    </section>
+  );
+}
+
+function PublicWishesPanel({
+  copyingWishId,
+  isSelf,
+  locale,
+  t,
+  wishes,
+  onCopy
+}: {
+  copyingWishId: string | null;
+  isSelf: boolean;
+  locale: AppLocale;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
+  wishes: PublicWish[];
+  onCopy: (wish: PublicWish) => void;
+}) {
+  return (
+    <section className="public-wishes-panel">
+      <h3>{t("wishes.publicTitle")}</h3>
+      <div className="public-wish-list">
+        {wishes.map((wish) => (
+          <article className="public-wish-card" key={wish.id}>
+            {wish.image_url ? <img alt="" src={wish.image_url} /> : <span className="public-wish-placeholder">{wish.title.slice(0, 1)}</span>}
+            <div>
+              <strong>{wish.title}</strong>
+              {wish.description ? <p>{wish.description}</p> : null}
+              <div className="public-wish-meta">
+                {wish.category ? <span>{wish.category}</span> : null}
+                {wish.target_amount ? <span>{formatWishAmount(wish, locale)}</span> : null}
+                <span>{t("wishes.level", { level: wish.difficulty_level })}</span>
+                <span>{t("wishes.copiedCount", { count: wish.copied_count })}</span>
+              </div>
+            </div>
+            {!isSelf ? (
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={copyingWishId === wish.id || wish.viewer_has_copy}
+                onClick={() => onCopy(wish)}
+              >
+                <Copy size={15} />
+                {wish.viewer_has_copy ? t("wishes.addedToMine") : copyingWishId === wish.id ? t("wishes.saving") : t("wishes.addToMine")}
+              </button>
+            ) : null}
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
@@ -1560,6 +1681,10 @@ function statBlockLabelKey(blockKey: string): MessageKey {
 
 function formatPostDate(post: FeedPost, locale: AppLocale): string {
   return formatDate(post.published_at ?? post.created_at, locale);
+}
+
+function formatWishAmount(wish: PublicWish, locale: AppLocale): string {
+  return `${formatMoney(wish.target_amount ?? 0, locale)} ${wish.target_currency}`;
 }
 
 function formatProviderLabel(provider: string): string {

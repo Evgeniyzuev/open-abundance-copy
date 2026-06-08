@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NO_STORE_HEADERS } from "@/lib/httpCache";
-import type { Database } from "@/lib/database.types";
+import type { Database, Tables } from "@/lib/database.types";
 import { getAuthenticatedUser } from "@/lib/serverSupabase";
 import {
   canViewVisibility,
@@ -12,6 +12,8 @@ import {
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const fetchCache = "force-no-store";
+
+type PublicWish = Tables<"wishes"> & { viewer_has_copy: boolean };
 
 export async function GET(request: NextRequest, { params }: { params: { userId: string } }) {
   try {
@@ -51,22 +53,25 @@ export async function GET(request: NextRequest, { params }: { params: { userId: 
     if (!profileResult.data) return NextResponse.json({ error: "Profile not found." }, { status: 404, headers: NO_STORE_HEADERS });
 
     const visibilitySettings = normalizeProfileVisibilitySettings(settingsResult.data?.settings);
+    const canViewWishes = canViewVisibility(visibilitySettings.wishes, relation);
     const profile = {
       ...profileResult.data,
       bio: canViewVisibility(visibilitySettings.bio, relation) ? profileResult.data.bio : null
     };
     const links = (linksResult.data ?? []).filter((link) => canViewVisibility(normalizeProfileVisibility(link.visibility), relation));
+    const publicWishes = canViewWishes ? await loadPublicWishes(supabase, targetUserId, user.id) : [];
 
     return NextResponse.json(
       {
         profile,
         links,
+        publicWishes,
         relation,
         visibleBlocks: {
           bio: canViewVisibility(visibilitySettings.bio, relation),
           income: canViewVisibility(visibilitySettings.income, relation),
           expenses: canViewVisibility(visibilitySettings.expenses, relation),
-          wishes: canViewVisibility(visibilitySettings.wishes, relation),
+          wishes: canViewWishes,
           achievements: canViewVisibility(visibilitySettings.achievements, relation),
           team: canViewVisibility(visibilitySettings.team, relation),
           posts: canViewVisibility(visibilitySettings.posts, relation)
@@ -113,6 +118,57 @@ async function loadRelation(supabase: SupabaseClient<Database>, targetUserId: st
     isTeam: isSelf || Boolean(teamResult.count),
     isFollower: false
   };
+}
+
+async function loadPublicWishes(supabase: SupabaseClient<Database>, targetUserId: string, viewerUserId: string): Promise<PublicWish[]> {
+  const { data, error } = await supabase
+    .from("wishes")
+    .select("*")
+    .eq("owner_user_id", targetUserId)
+    .eq("visibility", "public")
+    .in("status", ["active", "completed"])
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(6);
+
+  if (error) throw error;
+
+  const wishes = (data ?? []) as Tables<"wishes">[];
+  if (!wishes.length) return [];
+  if (targetUserId === viewerUserId) {
+    return wishes.map((wish) => ({ ...wish, viewer_has_copy: true }));
+  }
+
+  const sourceWishIds = wishes.map((wish) => wish.id);
+  const originalWishIds = Array.from(new Set(wishes.map((wish) => wish.original_wish_id ?? wish.id)));
+  const [directCopies, originalCopies] = await Promise.all([
+    supabase
+      .from("wishes")
+      .select("cloned_from_wish_id")
+      .eq("owner_user_id", viewerUserId)
+      .is("deleted_at", null)
+      .in("cloned_from_wish_id", sourceWishIds),
+    supabase
+      .from("wishes")
+      .select("original_wish_id")
+      .eq("owner_user_id", viewerUserId)
+      .is("deleted_at", null)
+      .in("original_wish_id", originalWishIds)
+  ]);
+
+  if (directCopies.error) throw directCopies.error;
+  if (originalCopies.error) throw originalCopies.error;
+
+  const copiedSourceIds = new Set((directCopies.data ?? []).map((wish) => wish.cloned_from_wish_id).filter(Boolean));
+  const copiedOriginalIds = new Set((originalCopies.data ?? []).map((wish) => wish.original_wish_id).filter(Boolean));
+
+  return wishes.map((wish) => {
+    const originalWishId = wish.original_wish_id ?? wish.id;
+    return {
+      ...wish,
+      viewer_has_copy: copiedSourceIds.has(wish.id) || copiedOriginalIds.has(originalWishId)
+    };
+  });
 }
 
 function normalizeUuid(value: unknown): string | null {
