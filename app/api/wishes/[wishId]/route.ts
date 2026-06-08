@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Tables, TablesUpdate } from "@/lib/database.types";
 import { NO_STORE_HEADERS } from "@/lib/httpCache";
 import { getAuthenticatedUser } from "@/lib/serverSupabase";
+import { publishWishToFeed } from "@/lib/serverWishFeed";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -25,6 +26,8 @@ type WishPatchBody = {
   difficulty_level?: unknown;
   visibility?: unknown;
   status?: unknown;
+  publishToFeed?: unknown;
+  publish_to_feed?: unknown;
 };
 
 export async function GET(request: NextRequest, { params }: { params: { wishId: string } }) {
@@ -85,22 +88,36 @@ export async function PATCH(request: NextRequest, { params }: { params: { wishId
 
     const body = await readJsonBody(request);
     const patch = normalizePatch(body, currentWish as WishRow);
-    if (!patch) {
+    if (patch === null) {
       return NextResponse.json({ error: "Wish title is required." }, { status: 400, headers: NO_STORE_HEADERS });
     }
 
-    const { data, error: updateError } = await supabase
-      .from("wishes")
-      .update(patch)
-      .eq("id", wishId)
-      .eq("owner_user_id", user.id)
-      .is("deleted_at", null)
-      .select("*")
-      .single();
+    let data = currentWish as WishRow;
+    if (Object.keys(patch).length > 0) {
+      const { data: updatedWish, error: updateError } = await supabase
+        .from("wishes")
+        .update(patch)
+        .eq("id", wishId)
+        .eq("owner_user_id", user.id)
+        .is("deleted_at", null)
+        .select("*")
+        .single();
 
-    if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500, headers: NO_STORE_HEADERS });
+      if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500, headers: NO_STORE_HEADERS });
+      data = updatedWish as WishRow;
+    }
 
-    return NextResponse.json({ wish: data }, { headers: NO_STORE_HEADERS });
+    const shouldPublishToFeed = normalizeBoolean(body.publishToFeed ?? body.publish_to_feed);
+    const publishResult = shouldPublishToFeed ? await publishWishToFeed(supabase, user.id, data) : null;
+
+    return NextResponse.json(
+      {
+        wish: data,
+        feedPost: publishResult?.post ?? null,
+        notice: publishResult?.notice
+      },
+      { headers: NO_STORE_HEADERS }
+    );
   } catch (routeError) {
     return NextResponse.json(
       { error: routeError instanceof Error ? routeError.message : "Failed to update wish." },
@@ -140,6 +157,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { wishI
       { status: 500, headers: NO_STORE_HEADERS }
     );
   }
+}
+
+function normalizeBoolean(value: unknown): boolean {
+  return value === true || value === "true";
 }
 
 function canReadWish(wish: WishRow, viewerUserId: string): boolean {

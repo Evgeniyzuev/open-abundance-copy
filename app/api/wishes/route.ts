@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Tables, TablesInsert } from "@/lib/database.types";
 import { NO_STORE_HEADERS } from "@/lib/httpCache";
 import { getAuthenticatedUser } from "@/lib/serverSupabase";
+import { publishWishToFeed } from "@/lib/serverWishFeed";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -25,6 +26,8 @@ type WishPostBody = {
   visibility?: unknown;
   sourceRecommendedWishId?: unknown;
   source_recommended_wish_id?: unknown;
+  publishToFeed?: unknown;
+  publish_to_feed?: unknown;
 };
 
 export async function GET(request: NextRequest) {
@@ -140,13 +143,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: insertError.message }, { status: 500, headers: NO_STORE_HEADERS });
     }
 
-    return NextResponse.json({ wish: data }, { status: 201, headers: NO_STORE_HEADERS });
+    const shouldPublishToFeed = normalizeBoolean(body.publishToFeed ?? body.publish_to_feed);
+    const publishResult = shouldPublishToFeed ? await publishWishToFeed(supabase, user.id, data) : null;
+
+    return NextResponse.json(
+      {
+        wish: data,
+        feedPost: publishResult?.post ?? null,
+        notice: publishResult?.notice
+      },
+      { status: 201, headers: NO_STORE_HEADERS }
+    );
   } catch (routeError) {
     return NextResponse.json(
       { error: routeError instanceof Error ? routeError.message : "Failed to create wish." },
       { status: 500, headers: NO_STORE_HEADERS }
     );
   }
+}
+
+function normalizeBoolean(value: unknown): boolean {
+  return value === true || value === "true";
 }
 
 function normalizeStatusParam(value: string | null): WishStatus | "all" {

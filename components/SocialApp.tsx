@@ -149,6 +149,7 @@ type FeedPost = {
   author: TeamProfile | null;
   statBlocks: FeedStatBlock[];
   externalLinks: FeedExternalLink[];
+  wish: PublicWish | null;
 };
 type FeedPayload = {
   scope: "feed" | "blog";
@@ -454,24 +455,32 @@ export default function SocialApp({
       const payload = (await response.json()) as { wish?: PublicWish; alreadyCopied?: boolean; error?: string };
       if (!response.ok || payload.error || !payload.wish) throw new Error(payload.error ?? "Failed to copy wish.");
 
-      setPublicProfile((current) => current
-        ? {
-            ...current,
-            publicWishes: current.publicWishes.map((item) => item.id === wish.id
-              ? {
-                  ...item,
-                  viewer_has_copy: true,
-                  copied_count: item.copied_count + (payload.alreadyCopied ? 0 : 1)
-                }
-              : item)
-          }
-        : current);
+      const copiedIncrement = payload.alreadyCopied ? 0 : 1;
+      markWishCopied(wish.id, copiedIncrement);
     } catch (copyError) {
       console.warn("Public wish copy failed", copyError);
       setSocialError(copyError instanceof Error ? copyError.message : "Failed to copy wish.");
     } finally {
       setCopyingWishId(null);
     }
+  }
+
+  function markWishCopied(wishId: string, copiedIncrement: number) {
+      setPublicProfile((current) => current
+        ? {
+            ...current,
+            publicWishes: current.publicWishes.map((item) => item.id === wishId
+              ? {
+                  ...item,
+                  viewer_has_copy: true,
+                  copied_count: item.copied_count + copiedIncrement
+                }
+              : item)
+          }
+        : current);
+    setFeedPayload((current) => updateFeedWishCopyState(current, wishId, copiedIncrement));
+    setBlogPayload((current) => updateFeedWishCopyState(current, wishId, copiedIncrement));
+    setSelectedPost((current) => current ? updatePostWishCopyState(current, wishId, copiedIncrement) : current);
   }
 
   async function removeManualContact(contactUserId: string) {
@@ -683,6 +692,7 @@ export default function SocialApp({
 
       {activeTab === "feed" && user ? (
         <FeedView
+          copyingWishId={copyingWishId}
           currentUserId={user.id}
           dailyDraft={dailyDraft}
           externalLinkUrl={externalLinkUrl}
@@ -693,6 +703,7 @@ export default function SocialApp({
           t={t}
           onCreateDraft={createDailyDraft}
           onCreateExternalLink={createExternalLinkPost}
+          onCopyWish={copyPublicWishToMine}
           onDraftBodyChange={updateDailyDraftBody}
           onExternalLinkUrlChange={setExternalLinkUrl}
           onOpenAuthor={openPublicProfile}
@@ -717,6 +728,7 @@ export default function SocialApp({
       {activeTab === "blog" && user ? (
         <BlogView
           blogPayload={blogPayload}
+          copyingWishId={copyingWishId}
           currentUserId={user.id}
           loading={feedLoading}
           locale={locale}
@@ -726,6 +738,7 @@ export default function SocialApp({
           onOpenAuthor={openPublicProfile}
           onOpenOwnBlog={() => setSelectedBlogAuthorId(null)}
           onOpenPost={setSelectedPost}
+          onCopyWish={copyPublicWishToMine}
           onDeletePost={deletePost}
           onPublish={publishPost}
         />
@@ -1005,6 +1018,7 @@ export default function SocialApp({
       ) : null}
       {selectedPost ? (
         <PostDetailModal
+          copyingWishId={copyingWishId}
           currentUserId={user?.id ?? null}
           locale={locale}
           post={selectedPost}
@@ -1013,6 +1027,7 @@ export default function SocialApp({
           onDeletePost={deletePost}
           onOpenAuthor={openPublicProfile}
           onOpenBlog={openAuthorBlog}
+          onCopyWish={copyPublicWishToMine}
         />
       ) : null}
     </section>
@@ -1070,6 +1085,7 @@ function PublicWishesPanel({
 }
 
 function FeedView({
+  copyingWishId,
   currentUserId,
   dailyDraft,
   externalLinkUrl,
@@ -1080,6 +1096,7 @@ function FeedView({
   t,
   onCreateDraft,
   onCreateExternalLink,
+  onCopyWish,
   onDraftBodyChange,
   onExternalLinkUrlChange,
   onOpenAuthor,
@@ -1089,6 +1106,7 @@ function FeedView({
   onPublish,
   onToggleDraftBlock
 }: {
+  copyingWishId: string | null;
   currentUserId: string;
   dailyDraft: FeedPost | null;
   externalLinkUrl: string;
@@ -1099,6 +1117,7 @@ function FeedView({
   t: (key: MessageKey, values?: Record<string, string | number>) => string;
   onCreateDraft: () => void;
   onCreateExternalLink: () => void;
+  onCopyWish: (wish: PublicWish) => void;
   onDraftBodyChange: (body: string) => void;
   onExternalLinkUrlChange: (url: string) => void;
   onOpenAuthor: (userId: string) => void;
@@ -1140,6 +1159,7 @@ function FeedView({
         />
       </section>
       <PostList
+        copyingWishId={copyingWishId}
         currentUserId={currentUserId}
         emptyText={t("social.feed.empty")}
         loading={loading}
@@ -1147,6 +1167,7 @@ function FeedView({
         posts={posts}
         showBlogAction={true}
         t={t}
+        onCopyWish={onCopyWish}
         onOpenAuthor={onOpenAuthor}
         onOpenBlog={onOpenBlog}
         onOpenPost={onOpenPost}
@@ -1193,12 +1214,14 @@ function ExternalLinkComposer({
 
 function BlogView({
   blogPayload,
+  copyingWishId,
   currentUserId,
   loading,
   locale,
   saving,
   selectedBlogAuthorId,
   t,
+  onCopyWish,
   onOpenAuthor,
   onOpenOwnBlog,
   onOpenPost,
@@ -1206,12 +1229,14 @@ function BlogView({
   onPublish
 }: {
   blogPayload: FeedPayload | null;
+  copyingWishId: string | null;
   currentUserId: string;
   loading: boolean;
   locale: AppLocale;
   saving: boolean;
   selectedBlogAuthorId: string | null;
   t: (key: MessageKey, values?: Record<string, string | number>) => string;
+  onCopyWish: (wish: PublicWish) => void;
   onOpenAuthor: (userId: string) => void;
   onOpenOwnBlog: () => void;
   onOpenPost: (post: FeedPost) => void;
@@ -1237,6 +1262,7 @@ function BlogView({
         ) : null}
       </section>
       <PostList
+        copyingWishId={copyingWishId}
         currentUserId={currentUserId}
         emptyText={t("social.blog.empty")}
         loading={loading}
@@ -1245,6 +1271,7 @@ function BlogView({
         saving={saving}
         showBlogAction={false}
         t={t}
+        onCopyWish={onCopyWish}
         onOpenAuthor={onOpenAuthor}
         onOpenBlog={onOpenAuthor}
         onOpenPost={onOpenPost}
@@ -1310,6 +1337,7 @@ function DailyDraftEditor({
 }
 
 function PostList({
+  copyingWishId,
   currentUserId,
   emptyText,
   loading,
@@ -1318,12 +1346,14 @@ function PostList({
   saving,
   showBlogAction,
   t,
+  onCopyWish,
   onOpenAuthor,
   onOpenBlog,
   onOpenPost,
   onDeletePost,
   onPublish
 }: {
+  copyingWishId: string | null;
   currentUserId: string;
   emptyText: string;
   loading: boolean;
@@ -1332,6 +1362,7 @@ function PostList({
   saving?: boolean;
   showBlogAction: boolean;
   t: (key: MessageKey, values?: Record<string, string | number>) => string;
+  onCopyWish: (wish: PublicWish) => void;
   onOpenAuthor: (userId: string) => void;
   onOpenBlog: (userId: string) => void;
   onOpenPost: (post: FeedPost) => void;
@@ -1345,6 +1376,7 @@ function PostList({
     <div className="feed-post-list">
       {posts.map((post) => (
         <PostCard
+          copyingWishId={copyingWishId}
           currentUserId={currentUserId}
           key={post.id}
           locale={locale}
@@ -1352,6 +1384,7 @@ function PostList({
           saving={Boolean(saving)}
           showBlogAction={showBlogAction}
           t={t}
+          onCopyWish={onCopyWish}
           onOpenAuthor={onOpenAuthor}
           onOpenBlog={onOpenBlog}
           onOpenPost={onOpenPost}
@@ -1364,24 +1397,28 @@ function PostList({
 }
 
 function PostCard({
+  copyingWishId,
   currentUserId,
   locale,
   post,
   saving,
   showBlogAction,
   t,
+  onCopyWish,
   onOpenAuthor,
   onOpenBlog,
   onOpenPost,
   onDeletePost,
   onPublish
 }: {
+  copyingWishId: string | null;
   currentUserId: string;
   locale: AppLocale;
   post: FeedPost;
   saving: boolean;
   showBlogAction: boolean;
   t: (key: MessageKey, values?: Record<string, string | number>) => string;
+  onCopyWish: (wish: PublicWish) => void;
   onOpenAuthor: (userId: string) => void;
   onOpenBlog: (userId: string) => void;
   onOpenPost: (post: FeedPost) => void;
@@ -1405,6 +1442,14 @@ function PostCard({
         <p>{post.body ?? t("social.post.detail")}</p>
         <StatBlockGrid blocks={post.statBlocks} locale={locale} t={t} />
       </button>
+      <WishPostPreview
+        copyingWishId={copyingWishId}
+        currentUserId={currentUserId}
+        locale={locale}
+        post={post}
+        t={t}
+        onCopyWish={onCopyWish}
+      />
       <ExternalLinkPreview post={post} />
       <footer>
         <span className={`post-status ${post.status}`}>{t(postStatusLabelKey(post.status))}</span>
@@ -1430,21 +1475,73 @@ function PostCard({
   );
 }
 
+function WishPostPreview({
+  copyingWishId,
+  currentUserId,
+  locale,
+  post,
+  t,
+  onCopyWish
+}: {
+  copyingWishId: string | null;
+  currentUserId: string | null;
+  locale: AppLocale;
+  post: FeedPost;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
+  onCopyWish: (wish: PublicWish) => void;
+}) {
+  const wish = post.wish;
+  if (!wish) return null;
+
+  const canCopy = wish.owner_user_id !== currentUserId;
+  const isCopying = copyingWishId === wish.id;
+
+  return (
+    <section className="wish-post-preview">
+      {wish.image_url ? <img alt="" src={wish.image_url} /> : <span className="wish-post-placeholder">{wish.title.slice(0, 1)}</span>}
+      <div>
+        <strong>{wish.title}</strong>
+        {wish.description ? <p>{wish.description}</p> : null}
+        <div className="public-wish-meta">
+          {wish.target_amount ? <span>{formatWishAmount(wish, locale)}</span> : null}
+          <span>{t("wishes.level", { level: wish.difficulty_level })}</span>
+          <span>{t("wishes.copiedCount", { count: wish.copied_count })}</span>
+        </div>
+      </div>
+      {canCopy ? (
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={isCopying || wish.viewer_has_copy}
+          onClick={() => onCopyWish(wish)}
+        >
+          <Copy size={15} />
+          {wish.viewer_has_copy ? t("wishes.addedToMine") : isCopying ? t("wishes.saving") : t("wishes.addToMine")}
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
 function PostDetailModal({
+  copyingWishId,
   currentUserId,
   locale,
   post,
   t,
   onClose,
+  onCopyWish,
   onDeletePost,
   onOpenAuthor,
   onOpenBlog
 }: {
+  copyingWishId: string | null;
   currentUserId: string | null;
   locale: AppLocale;
   post: FeedPost;
   t: (key: MessageKey, values?: Record<string, string | number>) => string;
   onClose: () => void;
+  onCopyWish: (wish: PublicWish) => void;
   onDeletePost: (post: FeedPost) => void;
   onOpenAuthor: (userId: string) => void;
   onOpenBlog: (userId: string) => void;
@@ -1466,6 +1563,14 @@ function PostDetailModal({
         <h2>{post.body ?? t("social.post.detail")}</h2>
         <span className={`post-status ${post.status}`}>{t(postStatusLabelKey(post.status))} - {formatPostDate(post, locale)}</span>
         <StatBlockGrid blocks={post.statBlocks} locale={locale} t={t} />
+        <WishPostPreview
+          copyingWishId={copyingWishId}
+          currentUserId={currentUserId}
+          locale={locale}
+          post={post}
+          t={t}
+          onCopyWish={onCopyWish}
+        />
         <ExternalLinkPreview post={post} />
         <div className="post-detail-actions">
           <button className="secondary-button" type="button" onClick={() => onOpenBlog(post.author_user_id)}>
@@ -1645,6 +1750,26 @@ function createProfileEditorState(payload: SocialProfilePayload | null): Profile
     linkUrl: firstLink?.url ?? "",
     linkVisibility: (firstLink?.visibility as ProfileVisibility | undefined) ?? "public",
     visibilitySettings: payload?.visibilitySettings ?? { ...DEFAULT_PROFILE_VISIBILITY_SETTINGS }
+  };
+}
+
+function updateFeedWishCopyState(payload: FeedPayload | null, wishId: string, copiedIncrement: number): FeedPayload | null {
+  if (!payload) return payload;
+  return {
+    ...payload,
+    posts: payload.posts.map((post) => updatePostWishCopyState(post, wishId, copiedIncrement))
+  };
+}
+
+function updatePostWishCopyState(post: FeedPost, wishId: string, copiedIncrement: number): FeedPost {
+  if (post.wish?.id !== wishId) return post;
+  return {
+    ...post,
+    wish: {
+      ...post.wish,
+      viewer_has_copy: true,
+      copied_count: post.wish.copied_count + copiedIncrement
+    }
   };
 }
 

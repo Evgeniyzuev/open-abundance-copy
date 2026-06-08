@@ -9,8 +9,10 @@ export const revalidate = 0;
 export const fetchCache = "force-no-store";
 
 type FeedPostRow = Tables<"feed_posts">;
+type FeedPostEntityRow = Tables<"feed_post_entities">;
 type FeedStatBlockRow = Tables<"feed_post_stat_blocks">;
 type FeedExternalLinkRow = Tables<"feed_post_external_links">;
+type FeedWishRow = Tables<"wishes"> & { viewer_has_copy: boolean };
 type FeedProfile = Pick<Tables<"user_profiles">, "user_id" | "username" | "display_name" | "avatar_url" | "level" | "created_at">;
 type ExternalProvider = "tiktok" | "instagram" | "telegram" | "youtube" | "x" | "website" | "unknown";
 type CreateExternalLinkBody = {
@@ -58,11 +60,13 @@ export async function GET(request: NextRequest) {
     if (postsError) return NextResponse.json({ error: postsError.message }, { status: 500, headers: NO_STORE_HEADERS });
 
     const postRows = (posts ?? []) as FeedPostRow[];
-    const [profiles, statBlocks, externalLinks] = await Promise.all([
+    const [profiles, statBlocks, externalLinks, wishPosts] = await Promise.all([
       loadProfiles(supabase, Array.from(new Set(postRows.map((post) => post.author_user_id)))),
       loadStatBlocks(supabase, postRows.map((post) => post.id), scope === "blog" && authorUserId === user.id),
-      loadExternalLinks(supabase, postRows.map((post) => post.id))
+      loadExternalLinks(supabase, postRows.map((post) => post.id)),
+      loadWishPosts(supabase, postRows.map((post) => post.id), user.id)
     ]);
+    const visiblePostRows = postRows.filter((post) => post.post_type !== "wish" || wishPosts.has(post.id));
 
     const authorProfile = authorUserId ? profiles.find((item) => item.user_id === authorUserId) ?? null : null;
 
@@ -70,11 +74,12 @@ export async function GET(request: NextRequest) {
       {
         scope,
         author: authorProfile,
-        posts: postRows.map((post) => ({
+        posts: visiblePostRows.map((post) => ({
           ...post,
           author: profiles.find((item) => item.user_id === post.author_user_id) ?? null,
           statBlocks: filterStatBlocksForViewer(post, statBlocks, user.id),
-          externalLinks: externalLinks.filter((link) => link.post_id === post.id)
+          externalLinks: externalLinks.filter((link) => link.post_id === post.id),
+          wish: wishPosts.get(post.id) ?? null
         }))
       },
       { headers: NO_STORE_HEADERS }
@@ -151,7 +156,8 @@ export async function POST(request: NextRequest) {
           ...post,
           author: profiles.find((item) => item.user_id === post.author_user_id) ?? null,
           statBlocks: [],
-          externalLinks: [externalLink]
+          externalLinks: [externalLink],
+          wish: null
         },
         created: true
       },
@@ -163,6 +169,86 @@ export async function POST(request: NextRequest) {
       { status: 500, headers: NO_STORE_HEADERS }
     );
   }
+}
+
+async function loadWishPosts(supabase: SupabaseClient<Database>, postIds: string[], viewerUserId: string): Promise<Map<string, FeedWishRow>> {
+  const result = new Map<string, FeedWishRow>();
+  if (!postIds.length) return result;
+
+  const { data: entities, error: entitiesError } = await supabase
+    .from("feed_post_entities")
+    .select("*")
+    .in("post_id", postIds)
+    .eq("entity_type", "wish")
+    .eq("relation", "primary");
+
+  if (entitiesError) throw entitiesError;
+  const entityRows = (entities ?? []) as FeedPostEntityRow[];
+  const wishIds = Array.from(new Set(entityRows.map((entity) => entity.entity_id)));
+  if (!wishIds.length) return result;
+
+  const { data: wishes, error: wishesError } = await supabase
+    .from("wishes")
+    .select("*")
+    .in("id", wishIds)
+    .eq("visibility", "public")
+    .in("status", ["active", "completed"])
+    .is("deleted_at", null);
+
+  if (wishesError) throw wishesError;
+  const wishRows = (wishes ?? []) as Tables<"wishes">[];
+  if (!wishRows.length) return result;
+
+  const copiedWishIds = await loadCopiedWishIds(supabase, wishRows, viewerUserId);
+  const wishesById = new Map(
+    wishRows.map((wish) => [
+      wish.id,
+      {
+        ...wish,
+        viewer_has_copy: wish.owner_user_id === viewerUserId || copiedWishIds.has(wish.id) || copiedWishIds.has(wish.original_wish_id ?? wish.id)
+      }
+    ])
+  );
+
+  entityRows.forEach((entity) => {
+    const wish = wishesById.get(entity.entity_id);
+    if (wish) result.set(entity.post_id, wish);
+  });
+
+  return result;
+}
+
+async function loadCopiedWishIds(supabase: SupabaseClient<Database>, wishes: Tables<"wishes">[], viewerUserId: string): Promise<Set<string>> {
+  const copiedIds = new Set<string>();
+  const sourceWishIds = wishes.map((wish) => wish.id);
+  const originalWishIds = Array.from(new Set(wishes.map((wish) => wish.original_wish_id ?? wish.id)));
+
+  const [directCopies, originalCopies] = await Promise.all([
+    supabase
+      .from("wishes")
+      .select("cloned_from_wish_id")
+      .eq("owner_user_id", viewerUserId)
+      .is("deleted_at", null)
+      .in("cloned_from_wish_id", sourceWishIds),
+    supabase
+      .from("wishes")
+      .select("original_wish_id")
+      .eq("owner_user_id", viewerUserId)
+      .is("deleted_at", null)
+      .in("original_wish_id", originalWishIds)
+  ]);
+
+  if (directCopies.error) throw directCopies.error;
+  if (originalCopies.error) throw originalCopies.error;
+
+  (directCopies.data ?? []).forEach((wish) => {
+    if (wish.cloned_from_wish_id) copiedIds.add(wish.cloned_from_wish_id);
+  });
+  (originalCopies.data ?? []).forEach((wish) => {
+    if (wish.original_wish_id) copiedIds.add(wish.original_wish_id);
+  });
+
+  return copiedIds;
 }
 
 async function loadProfiles(supabase: SupabaseClient<Database>, userIds: string[]): Promise<FeedProfile[]> {
@@ -215,7 +301,7 @@ async function findExistingExternalPost(
   supabase: SupabaseClient<Database>,
   userId: string,
   normalized: NormalizedExternalLink
-): Promise<(FeedPostRow & { author: FeedProfile | null; statBlocks: FeedStatBlockRow[]; externalLinks: FeedExternalLinkRow[] }) | null> {
+): Promise<(FeedPostRow & { author: FeedProfile | null; statBlocks: FeedStatBlockRow[]; externalLinks: FeedExternalLinkRow[]; wish: null }) | null> {
   const { data: links, error: linksError } = await supabase
     .from("feed_post_external_links")
     .select("*")
@@ -245,7 +331,8 @@ async function findExistingExternalPost(
     ...post,
     author: profiles.find((item) => item.user_id === post.author_user_id) ?? null,
     statBlocks: [],
-    externalLinks: (links ?? []).filter((link) => link.post_id === post.id) as FeedExternalLinkRow[]
+    externalLinks: (links ?? []).filter((link) => link.post_id === post.id) as FeedExternalLinkRow[],
+    wish: null
   };
 }
 

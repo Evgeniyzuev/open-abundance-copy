@@ -72,6 +72,8 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .wish-form-modal { max-height: min(88vh, 780px); overflow: auto; }
 .wish-form-grid { display: grid; gap: 10px; }
 .wish-form-preview { width: 100%; max-height: 180px; display: block; object-fit: cover; border-radius: 12px; }
+.wish-publish-toggle { min-height: 40px; display: flex; align-items: center; gap: 9px; border-radius: 10px; padding: 0 10px; background: #eef6ff; color: var(--blue); font-size: 14px; font-weight: 850; }
+.wish-publish-toggle input { width: 18px; height: 18px; accent-color: var(--blue); }
 .challenges-screen { width: min(100vw, 610px); margin: 0 auto; padding: 0 6px 20px; }
 .challenges-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 4px 14px; }
 .challenges-header span { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
@@ -283,6 +285,12 @@ button:disabled { cursor: not-allowed; opacity: 0.45; }
 .feed-author-avatar img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .feed-post-body { display: grid; gap: 10px; background: transparent; color: var(--text); text-align: left; }
 .feed-post-body p { margin: 0; color: var(--text); font-size: 16px; line-height: 1.35; white-space: pre-wrap; }
+.wish-post-preview { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 10px; align-items: start; border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: #f8f8fb; text-align: left; }
+.wish-post-preview > img, .wish-post-placeholder { width: 68px; height: 68px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; object-fit: cover; background: #eef6ff; color: var(--blue); font-size: 28px; font-weight: 900; }
+.wish-post-preview > div { min-width: 0; display: grid; gap: 5px; }
+.wish-post-preview strong { overflow-wrap: anywhere; font-size: 16px; line-height: 1.15; }
+.wish-post-preview p { display: -webkit-box; overflow: hidden; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.wish-post-preview .secondary-button { grid-column: 1 / -1; min-height: 36px; border-radius: 10px; font-size: 13px; }
 .external-link-preview { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: #f8f8fb; color: var(--text); text-decoration: none; }
 .external-link-preview span, .external-link-preview small { overflow: hidden; color: var(--muted); font-size: 11px; font-weight: 850; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .external-link-preview strong { overflow: hidden; font-size: 15px; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }

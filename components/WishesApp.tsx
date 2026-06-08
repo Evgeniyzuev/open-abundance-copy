@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { Archive, Check, Pencil, Plus, Trash2 } from "lucide-react";
+import { Archive, Check, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import type { Json, Tables } from "@/lib/database.types";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
 import { useUserContext } from "@/components/UserProvider";
@@ -23,9 +23,11 @@ type WishesResponse = {
 };
 
 type WishMutationResponse = {
+  feedPost?: unknown;
   wish?: Wish;
   deletedWishId?: string;
   error?: string;
+  notice?: string;
 };
 
 type WishesAppProps = {
@@ -44,6 +46,7 @@ type FormState = {
   targetAmount: string;
   targetCurrency: string;
   difficultyLevel: string;
+  publishToFeed: boolean;
   visibility: WishVisibility;
   sourceRecommendedWishId: string | null;
 };
@@ -56,8 +59,14 @@ const emptyForm: FormState = {
   targetAmount: "",
   targetCurrency: "USD",
   difficultyLevel: "1",
+  publishToFeed: true,
   visibility: "private",
   sourceRecommendedWishId: null
+};
+
+type SavedWishResult = {
+  notice?: string;
+  wish: Wish;
 };
 
 export default function WishesApp({ refreshNonce }: WishesAppProps) {
@@ -136,24 +145,36 @@ export default function WishesApp({ refreshNonce }: WishesAppProps) {
   }, [refreshNonce, t, user, userLoading]);
 
   async function createWish(values: FormState) {
-    const wish = await sendWishRequest("/api/wishes", "POST", formToPayload(values));
+    setErrorMessage(null);
+    const { notice, wish } = await sendWishRequest("/api/wishes", "POST", formToPayload(values));
     setWishes((current) => [wish, ...current]);
     if (wish.source_recommended_wish_id) {
       setRecommendedWishes((current) => current.filter((item) => item.id !== wish.source_recommended_wish_id));
     }
+    if (notice) setErrorMessage(notice);
     setIsCreateOpen(false);
     setRecommendedDraft(null);
   }
 
   async function updateWish(wish: Wish, values: FormState) {
-    const updatedWish = await sendWishRequest(`/api/wishes/${wish.id}`, "PATCH", formToPayload(values));
+    setErrorMessage(null);
+    const { notice, wish: updatedWish } = await sendWishRequest(`/api/wishes/${wish.id}`, "PATCH", formToPayload(values));
     replaceWish(updatedWish);
+    if (notice) setErrorMessage(notice);
     setEditingWish(null);
     setSelectedWish({ type: "wish", wish: updatedWish });
   }
 
+  async function publishWish(wish: Wish) {
+    setErrorMessage(null);
+    const { notice, wish: updatedWish } = await sendWishRequest(`/api/wishes/${wish.id}`, "PATCH", { publishToFeed: true });
+    replaceWish(updatedWish);
+    if (notice) setErrorMessage(notice);
+    setSelectedWish({ type: "wish", wish: updatedWish });
+  }
+
   async function setWishStatus(wish: Wish, nextStatus: WishStatus) {
-    const updatedWish = await sendWishRequest(`/api/wishes/${wish.id}`, "PATCH", { status: nextStatus });
+    const { wish: updatedWish } = await sendWishRequest(`/api/wishes/${wish.id}`, "PATCH", { status: nextStatus });
     replaceWish(updatedWish);
     setSelectedWish({ type: "wish", wish: updatedWish });
   }
@@ -182,7 +203,7 @@ export default function WishesApp({ refreshNonce }: WishesAppProps) {
     setWishes((current) => current.map((item) => item.id === nextWish.id ? nextWish : item));
   }
 
-  async function sendWishRequest(url: string, method: "POST" | "PATCH", body: unknown): Promise<Wish> {
+  async function sendWishRequest(url: string, method: "POST" | "PATCH", body: unknown): Promise<SavedWishResult> {
     const accessToken = await getAccessToken();
     if (!accessToken) throw new Error(t("wishes.signInFirst"));
 
@@ -201,12 +222,13 @@ export default function WishesApp({ refreshNonce }: WishesAppProps) {
       throw new Error(payload.error ?? "Failed to save wish.");
     }
 
-    return payload.wish;
+    return { notice: payload.notice, wish: payload.wish };
   }
 
   return (
     <section className="wishes-screen">
       {isRefreshing && wishes.length > 0 ? <div className="wishes-refreshing">{t("wishes.refreshing")}</div> : null}
+      {errorMessage && status === "ready" ? <p className="finance-error neutral">{errorMessage}</p> : null}
       {status === "loading" && wishes.length === 0 ? <WishState title={t("app.common.loading")} description={t("wishes.loading.description")} /> : null}
       {status === "offline" && wishes.length === 0 ? <WishState title={t("app.common.offline")} description={t("wishes.offline.description")} /> : null}
       {status === "unauthenticated" ? <WishState title={t("wishes.authRequiredTitle")} description={t("wishes.authRequiredDescription")} /> : null}
@@ -264,6 +286,7 @@ export default function WishesApp({ refreshNonce }: WishesAppProps) {
             setSelectedWish(null);
             setEditingWish(wish);
           }}
+          onPublish={(wish) => publishWish(wish).catch((detailError) => setErrorMessage(detailError instanceof Error ? detailError.message : t("wishes.error")))}
           onUseTemplate={(wish) => {
             setSelectedWish(null);
             setRecommendedDraft(wish);
@@ -338,6 +361,7 @@ function WishDetailModal({
   onComplete,
   onDelete,
   onEdit,
+  onPublish,
   onUseTemplate,
   onRestore,
   selectedWish
@@ -348,6 +372,7 @@ function WishDetailModal({
   onComplete: (wish: Wish) => void;
   onDelete: (wish: Wish) => void;
   onEdit: (wish: Wish) => void;
+  onPublish: (wish: Wish) => void;
   onUseTemplate: (wish: RecommendedWish) => void;
   onRestore: (wish: Wish) => void;
 }) {
@@ -397,6 +422,12 @@ function WishDetailModal({
                 <button className="secondary-button" type="button" onClick={() => onArchive(selectedWish.wish)}>
                   <Archive size={16} />
                   {t("wishes.archiveAction")}
+                </button>
+              ) : null}
+              {selectedWish.wish.visibility === "public" && selectedWish.wish.status !== "archived" ? (
+                <button className="secondary-button" type="button" onClick={() => onPublish(selectedWish.wish)}>
+                  <Send size={16} />
+                  {t("social.feed.publish")}
                 </button>
               ) : null}
               <button className="danger-button" type="button" onClick={() => onDelete(selectedWish.wish)}>
@@ -506,6 +537,12 @@ function WishFormModal({
               </select>
             </label>
           </div>
+          {form.visibility === "public" ? (
+            <label className="wish-publish-toggle">
+              <input type="checkbox" checked={form.publishToFeed} onChange={(event) => updateField("publishToFeed", event.target.checked)} />
+              <span>{t("wishes.publishToFeed")}</span>
+            </label>
+          ) : null}
           {form.imageUrl ? <img className="wish-form-preview" alt="" src={form.imageUrl} /> : null}
           {error ? <p className="finance-error inline">{error}</p> : null}
         </div>
@@ -535,6 +572,7 @@ function formToPayload(form: FormState) {
     targetCurrency: form.targetCurrency,
     difficultyLevel: form.difficultyLevel,
     visibility: form.visibility,
+    publishToFeed: form.visibility === "public" && form.publishToFeed,
     sourceRecommendedWishId: form.sourceRecommendedWishId
   };
 }
@@ -548,6 +586,7 @@ function wishToForm(wish: Wish): FormState {
     targetAmount: wish.target_amount === null ? "" : String(wish.target_amount),
     targetCurrency: wish.target_currency,
     difficultyLevel: String(wish.difficulty_level),
+    publishToFeed: false,
     visibility: wish.visibility,
     sourceRecommendedWishId: wish.source_recommended_wish_id
   };
@@ -562,6 +601,7 @@ function recommendedToForm(wish: RecommendedWish, locale: AppLocale): FormState 
     targetAmount: estimatedCostToAmount(wish.estimated_cost),
     targetCurrency: "USD",
     difficultyLevel: String(wish.difficulty_level),
+    publishToFeed: false,
     visibility: "private",
     sourceRecommendedWishId: wish.id
   };

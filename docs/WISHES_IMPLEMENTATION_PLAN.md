@@ -379,6 +379,8 @@ Challenge condition `has_wish` должен проверять:
 
 Решение 2026-06-08 для этапа 4: по умолчанию wish остается private. Если пользователь выбирает `public`, показывать чекбокс "Опубликовать в ленте"; для нового public wish чекбокс включен по умолчанию, но пользователь может его снять. Copied wish по умолчанию создается `private` и без автопубликации. Лимит MVP: не больше 3 wish-публикаций в ленту в день на пользователя; лимит блокирует только создание feed post, но не создание самого wish.
 
+Статус 2026-06-08: этап 4 реализован в `supabase/migrations/20260608175021_wish_posts_feed_entities.sql`, `lib/serverWishFeed.ts`, `app/api/wishes`, `app/api/social/feed/route.ts`, `components/WishesApp.tsx`, `components/SocialApp.tsx`, `app/globals.css`, `lib/i18n.ts` и `lib/database.types.ts`. Добавлены `feed_posts.post_type = 'wish'`, `feed_post_entities`, RLS/grants, idempotent publish helper с лимитом 3 wish-поста в день, чекбокс "Опубликовать в ленте" для public wish, ручное publish action из wish detail, wish preview в feed/blog/detail и CTA "Добавить себе" из wish post.
+
 ### Этап 5. Progress And Autoposts
 
 - связать желания с задачами/challenges;
