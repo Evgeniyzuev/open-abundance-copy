@@ -39,7 +39,7 @@ type TargetKind = "core" | "daily";
 type TermUnit = "days" | "months" | "years";
 type TFunction = (key: MessageKey, values?: Record<string, string | number>) => string;
 
-export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { activeTab: WalletTab; refreshNonce: number; onRefresh: () => Promise<void> }) {
+export default function WalletApp({ active, activeTab, refreshNonce, onRefresh }: { active: boolean; activeTab: WalletTab; refreshNonce: number; onRefresh: () => Promise<void> }) {
   const { core, wallet, user, loading, error, locale, applyServerData, t } = useUserContext();
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyRows, setHistoryRows] = useState<CoreAccrualRow[] | null>(null);
@@ -77,13 +77,13 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
     setWalletHistoryRows(null);
     setWalletHistoryLoading(false);
     setWalletHistoryError(null);
-  }, [activeTab, user?.id]);
+  }, [user?.id]);
 
   useEffect(() => {
     let mounted = true;
 
     async function loadHistory() {
-      if (activeTab !== "core" || !historyOpen || !user) return;
+      if (!active || activeTab !== "core" || !historyOpen || !user) return;
 
       setHistoryError(null);
 
@@ -108,13 +108,13 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
     return () => {
       mounted = false;
     };
-  }, [activeTab, historyOpen, refreshNonce, user]);
+  }, [active, activeTab, historyOpen, refreshNonce, user]);
 
   useEffect(() => {
     let mounted = true;
 
     async function loadHistory() {
-      if (activeTab !== "wallet" || !walletHistoryOpen || !user) return;
+      if (!active || activeTab !== "wallet" || !walletHistoryOpen || !user) return;
 
       setWalletHistoryError(null);
 
@@ -139,7 +139,7 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
     return () => {
       mounted = false;
     };
-  }, [activeTab, refreshNonce, user, walletHistoryOpen]);
+  }, [active, activeTab, refreshNonce, user, walletHistoryOpen]);
 
   useEffect(() => {
     if (!user) {
@@ -164,13 +164,11 @@ export default function WalletApp({ activeTab, refreshNonce, onRefresh }: { acti
   function toggleCoreHistory() {
     const nextOpen = !historyOpen;
     setHistoryOpen(nextOpen);
-    if (nextOpen) setHistoryRows(null);
   }
 
   function toggleWalletHistory() {
     const nextOpen = !walletHistoryOpen;
     setWalletHistoryOpen(nextOpen);
-    if (nextOpen) setWalletHistoryRows(null);
   }
 
   async function saveReinvestPercent() {
@@ -432,6 +430,8 @@ function HistoryPanel({
   onToggle: () => void;
   children: ReactNode;
 }) {
+  const hasRows = rowCount > 0;
+
   return (
     <section className="history-section">
       <button className="history-toggle" type="button" onClick={onToggle}>
@@ -442,8 +442,8 @@ function HistoryPanel({
         <div className="history-body">
           {loading ? <p>{loadingText}</p> : null}
           {error ? <p className="finance-error">{error}</p> : null}
-          {!loading && !error && rowCount > 0 ? children : null}
-          {!loading && !error && rowCount === 0 ? <p>{emptyText}</p> : null}
+          {!error && hasRows ? children : null}
+          {!loading && !error && !hasRows ? <p>{emptyText}</p> : null}
         </div>
       ) : null}
     </section>

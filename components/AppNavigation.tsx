@@ -80,6 +80,12 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
+  const [visitedServerViews, setVisitedServerViews] = useState({
+    wishes: false,
+    challenges: false,
+    wallet: false,
+    people: false
+  });
   const refreshInFlightRef = useRef(false);
   const refreshQueuedRef = useRef(false);
   const refreshQueueResolversRef = useRef<Array<() => void>>([]);
@@ -219,6 +225,17 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
   const topTabs = getTopTabs(activeMainTab);
   const activeTopTab = getActiveTopTab(activeMainTab, activeGoalTab, activeWalletTab, activeSocialTab);
 
+  useEffect(() => {
+    if (!showWishes && !showChallenges && !showWallet && !showPeople) return;
+
+    setVisitedServerViews((current) => ({
+      wishes: current.wishes || showWishes,
+      challenges: current.challenges || showChallenges,
+      wallet: current.wallet || showWallet,
+      people: current.people || showPeople
+    }));
+  }, [showChallenges, showPeople, showWallet, showWishes]);
+
   function handleTopTabChange(tab: string) {
     if (activeMainTab === "goals") setActiveGoalTab(tab as GoalTabId);
     if (activeMainTab === "wallet") setActiveWalletTab(tab as WalletTabId);
@@ -233,11 +250,27 @@ export default function AppNavigation({ notesSlot }: AppNavigationProps) {
       <TopTabBar activeMainTab={activeMainTab} activeTab={activeTopTab} hidden={navHidden} tabs={topTabs} t={t} onTabChange={handleTopTabChange} />
       <section className="app-content">
         {showNotes ? notesSlot : null}
-        {showWishes ? <WishesApp refreshNonce={refreshNonce} /> : null}
+        {showWishes || visitedServerViews.wishes ? (
+          <div className="app-view" hidden={!showWishes}>
+            <WishesApp active={showWishes} refreshNonce={refreshNonce} />
+          </div>
+        ) : null}
         {showChecks ? <TasksApp /> : null}
-        {showChallenges ? <ChallengesApp refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("challenges")} /> : null}
-        {showWallet ? <WalletApp activeTab={activeWalletTab} refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("wallet")} /> : null}
-        {showPeople ? <SocialApp activeTab={activeSocialTab} refreshNonce={refreshNonce} onTabChange={setActiveSocialTab} /> : null}
+        {showChallenges || visitedServerViews.challenges ? (
+          <div className="app-view" hidden={!showChallenges}>
+            <ChallengesApp active={showChallenges} refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("challenges")} />
+          </div>
+        ) : null}
+        {showWallet || visitedServerViews.wallet ? (
+          <div className="app-view" hidden={!showWallet}>
+            <WalletApp active={showWallet} activeTab={activeWalletTab} refreshNonce={refreshNonce} onRefresh={() => requestServerRefresh("wallet")} />
+          </div>
+        ) : null}
+        {showPeople || visitedServerViews.people ? (
+          <div className="app-view" hidden={!showPeople}>
+            <SocialApp active={showPeople} activeTab={activeSocialTab} refreshNonce={refreshNonce} onTabChange={setActiveSocialTab} />
+          </div>
+        ) : null}
         {!showNotes && !showWishes && !showChecks && !showChallenges && !showWallet && !showPeople ? <PlaceholderScreen title={currentTitle} /> : null}
       </section>
       <BottomTabBar activeTab={activeMainTab} hidden={navHidden} t={t} onTabChange={setActiveMainTab} />

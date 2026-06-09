@@ -166,10 +166,12 @@ type ProfileEditorState = {
 };
 
 export default function SocialApp({
+  active,
   activeTab,
   refreshNonce,
   onTabChange
 }: {
+  active: boolean;
   activeTab: SocialTab;
   refreshNonce: number;
   onTabChange: SocialTabChange;
@@ -326,6 +328,7 @@ export default function SocialApp({
   }, [selectedBlogAuthorId, user]);
 
   useEffect(() => {
+    if (!active) return;
     if (!user) {
       setReferralLink(null);
       setTeamContext(null);
@@ -346,7 +349,7 @@ export default function SocialApp({
       console.warn("Social data load failed", loadError);
       setSocialError(loadError instanceof Error ? loadError.message : "Failed to load social data.");
     });
-  }, [activeTab, loadBlog, loadFeed, loadProfileTab, loadTeamContext, refreshNonce, user]);
+  }, [active, activeTab, loadBlog, loadFeed, loadProfileTab, loadTeamContext, refreshNonce, user]);
 
   const displayName = profile?.display_name ?? user?.email ?? t("profile.guest");
   const handle = profile?.username ? `@${profile.username}` : user?.email ?? t("profile.localMode");
@@ -662,7 +665,6 @@ export default function SocialApp({
     if (!nextOpen) return;
 
     setNotificationsLoading(true);
-    setNotifications(null);
     setSocialError(null);
     try {
       const [coreRows, rewardRows] = await Promise.all([
@@ -1369,7 +1371,7 @@ function PostList({
   onDeletePost: (post: FeedPost) => void;
   onPublish: (post: FeedPost) => void;
 }) {
-  if (loading) return <p className="finance-error neutral">{t("app.common.loading")}</p>;
+  if (loading && !posts.length) return <p className="finance-error neutral">{t("app.common.loading")}</p>;
   if (!posts.length) return <p className="feed-empty">{emptyText}</p>;
 
   return (
@@ -1637,6 +1639,8 @@ function HistoryPanel({
   onToggle: () => void;
   children: ReactNode;
 }) {
+  const hasRows = rowCount > 0;
+
   return (
     <section className="history-section">
       <button className="history-toggle" type="button" onClick={onToggle}>
@@ -1647,8 +1651,8 @@ function HistoryPanel({
         <div className="history-body">
           {loading ? <p>{loadingText}</p> : null}
           {error ? <p className="finance-error">{error}</p> : null}
-          {!loading && !error && rowCount > 0 ? children : null}
-          {!loading && !error && rowCount === 0 ? <p>{emptyText}</p> : null}
+          {!error && hasRows ? children : null}
+          {!loading && !error && !hasRows ? <p>{emptyText}</p> : null}
         </div>
       ) : null}
     </section>

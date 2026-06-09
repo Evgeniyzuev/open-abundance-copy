@@ -54,11 +54,12 @@ const DEFAULT_USER_LEVEL = 1;
 const VISIBLE_REFRESH_COOLDOWN_MS = 30_000;
 
 type ChallengesAppProps = {
+  active: boolean;
   refreshNonce: number;
   onRefresh: () => Promise<void>;
 };
 
-export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesAppProps) {
+export default function ChallengesApp({ active, refreshNonce, onRefresh }: ChallengesAppProps) {
   const [acceptedChallenges, setAcceptedChallenges] = useState<Challenge[]>([]);
   const [completedChallenges, setCompletedChallenges] = useState<Challenge[]>([]);
   const [availableChallenges, setAvailableChallenges] = useState<Challenge[]>([]);
@@ -144,6 +145,7 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
   }, [user]);
 
   useEffect(() => {
+    if (!active) return;
     if (!selectedChallenge && !completionReward) return;
 
     const previousOverflow = document.body.style.overflow;
@@ -152,18 +154,20 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [completionReward, selectedChallenge]);
+  }, [active, completionReward, selectedChallenge]);
 
   useEffect(() => {
+    if (!active) return;
     let mounted = true;
 
     loadChallenges({ isMounted: () => mounted });
     return () => {
       mounted = false;
     };
-  }, [loadChallenges, refreshNonce, user?.id]);
+  }, [active, loadChallenges, refreshNonce, user?.id]);
 
   useEffect(() => {
+    if (!active) return;
     let mounted = true;
 
     const refreshVisibleChallenges = () => {
@@ -183,7 +187,7 @@ export default function ChallengesApp({ refreshNonce, onRefresh }: ChallengesApp
       window.removeEventListener("focus", refreshVisibleChallenges);
       document.removeEventListener("visibilitychange", refreshVisibleChallenges);
     };
-  }, [loadChallenges]);
+  }, [active, loadChallenges]);
 
   async function acceptChallenge(challenge: Challenge) {
     const token = await getAccessToken();

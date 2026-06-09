@@ -31,6 +31,7 @@ type WishMutationResponse = {
 };
 
 type WishesAppProps = {
+  active: boolean;
   refreshNonce: number;
 };
 
@@ -69,7 +70,7 @@ type SavedWishResult = {
   wish: Wish;
 };
 
-export default function WishesApp({ refreshNonce }: WishesAppProps) {
+export default function WishesApp({ active, refreshNonce }: WishesAppProps) {
   const { loading: userLoading, locale, t, user } = useUserContext();
   const [wishes, setWishes] = useState<Wish[]>([]);
   const [recommendedWishes, setRecommendedWishes] = useState<RecommendedWish[]>([]);
@@ -89,6 +90,7 @@ export default function WishesApp({ refreshNonce }: WishesAppProps) {
     let mounted = true;
 
     async function loadWishes() {
+      if (!active) return;
       if (userLoading) return;
       if (!user) {
         setStatus("unauthenticated");
@@ -142,7 +144,7 @@ export default function WishesApp({ refreshNonce }: WishesAppProps) {
     return () => {
       mounted = false;
     };
-  }, [refreshNonce, t, user, userLoading]);
+  }, [active, refreshNonce, t, user, userLoading]);
 
   async function createWish(values: FormState) {
     setErrorMessage(null);
