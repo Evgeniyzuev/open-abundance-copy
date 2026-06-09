@@ -49,7 +49,7 @@ const emptyTaskForm = {
   startDate: todayKey(),
   targetDays: "7",
   infinite: false,
-  hardcore: false,
+  softMode: true,
   initialLives: "0",
   livesEveryDays: "0",
   weekdays: [1, 2, 3, 4, 5],
@@ -134,7 +134,9 @@ export default function TasksApp() {
     let rescuedCount = 0;
 
     if (task.schedule.type !== "once" && task.streak && missedDays.length > 0) {
-      if (task.streak.hardcore) {
+      if (task.streak.softMode) {
+        rescuedCount = 0;
+      } else if (task.streak.hardcore) {
         await failTask(task.id);
         setSelectedTaskId(null);
         await refreshTasks();
@@ -227,7 +229,7 @@ export default function TasksApp() {
 
   return (
     <section className="tasks-screen">
-      <header className="tasks-header">
+      {/* <header className="tasks-header">
         <div>
           <span>Checks</span>
           <h1>{t("tasks.title")}</h1>
@@ -235,7 +237,7 @@ export default function TasksApp() {
         <button className="tasks-add-button" type="button" aria-label={t("tasks.newTask")} onClick={openNewTaskModal}>
           <Plus size={24} />
         </button>
-      </header>
+      </header> */}
 
       <TaskSection title={t("tasks.today")} emptyText={t("tasks.todayEmpty")} tasks={todayTasks} completions={completions} today={today} onMarkToday={markToday} onOpen={setSelectedTaskId} onRepeat={repeatTask} />
 
@@ -551,10 +553,10 @@ function TaskModal({ form, setForm, onClose, onSubmit }: TaskModalProps) {
             </div>
             <div className="streak-options">
               <label>
-                <input type="checkbox" checked={form.hardcore} onChange={(event) => setForm((current) => ({ ...current, hardcore: event.target.checked }))} />
-                {t("tasks.hardcore")}
+                <input type="checkbox" checked={form.softMode} onChange={(event) => setForm((current) => ({ ...current, softMode: event.target.checked }))} />
+                {t("tasks.softMode")}
               </label>
-              {!form.hardcore ? (
+              {!form.softMode ? (
                 <div className="life-settings-row">
                   <label className="life-field">
                     <span>{t("tasks.initialLivesLabel")}</span>
@@ -724,7 +726,7 @@ function TaskMonthCalendar({ task, completions, locale, today }: { task: TaskIte
 
 function buildFormFromTask(task: TaskItem, today: string): typeof emptyTaskForm {
   const targetDays = task.schedule.type === "once" ? "7" : String(task.schedule.targetDays ?? 7);
-  const streak = task.streak ?? { hardcore: false, initialLives: 0, livesEveryDays: 0 };
+  const streak = task.streak ?? { softMode: true, initialLives: 0, livesEveryDays: 0 };
 
   return {
     ...emptyTaskForm,
@@ -734,7 +736,7 @@ function buildFormFromTask(task: TaskItem, today: string): typeof emptyTaskForm 
     startDate: today,
     targetDays,
     infinite: task.schedule.type === "once" ? false : task.schedule.infinite,
-    hardcore: streak.hardcore,
+    softMode: streak.softMode,
     initialLives: String(streak.initialLives),
     livesEveryDays: String(streak.livesEveryDays),
     weekdays: task.schedule.type === "weekdays" ? task.schedule.weekdays : [1, 2, 3, 4, 5],
@@ -757,7 +759,8 @@ function buildSchedule(form: typeof emptyTaskForm): TaskSchedule {
 function buildStreakSettings(form: typeof emptyTaskForm): TaskStreakSettings | undefined {
   if (form.scheduleType === "once") return undefined;
   return {
-    hardcore: form.hardcore,
+    softMode: form.softMode,
+    hardcore: false,
     initialLives: Math.max(0, Math.floor(Number(form.initialLives) || 0)),
     livesEveryDays: Math.max(0, Math.floor(Number(form.livesEveryDays) || 0))
   };
@@ -779,11 +782,13 @@ function isPlannedOn(task: TaskItem, day: string): boolean {
   if (task.schedule.startDate > day) return false;
   if (task.schedule.type === "daily") {
     if (task.schedule.infinite || !task.schedule.targetDays) return true;
+    if (task.streak?.softMode) return true;
     return daysBetween(task.schedule.startDate, day) < task.schedule.targetDays;
   }
 
   if (!task.schedule.weekdays.includes(getIsoWeekday(day))) return false;
   if (task.schedule.infinite || !task.schedule.targetDays) return true;
+  if (task.streak?.softMode) return true;
   return countPlannedDaysThrough(task, day) <= task.schedule.targetDays;
 }
 
@@ -892,7 +897,7 @@ function getProgress(task: TaskItem, completions: TaskCompletion[], t: (key: Mes
   if (task.schedule.type === "once") return { label: null, percent: null };
   const taskCompletions = completions.filter((completion) => completion.taskId === task.id);
   const completedDays = taskCompletions.length;
-  const livesLabel = task.streak && !task.streak.hardcore ? ` \u00B7 \u2764\uFE0F ${getAvailableLives(task.streak, taskCompletions)}` : "";
+  const livesLabel = task.streak && !task.streak.softMode && !task.streak.hardcore ? ` \u00B7 \u2764\uFE0F ${getAvailableLives(task.streak, taskCompletions)}` : "";
   if (task.schedule.infinite || !task.schedule.targetDays) return { label: `${t("tasks.days", { count: completedDays })}${livesLabel}`, percent: null };
   return {
     label: `${completedDays}/${task.schedule.targetDays}${livesLabel}`,

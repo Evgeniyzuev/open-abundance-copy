@@ -6,7 +6,8 @@ export type TaskSchedule =
   | { type: "weekdays"; startDate: string; weekdays: number[]; targetDays?: number; infinite: boolean };
 
 export type TaskStreakSettings = {
-  hardcore: boolean;
+  softMode: boolean;
+  hardcore?: boolean;
   initialLives: number;
   livesEveryDays: number;
 };
@@ -221,8 +222,10 @@ function normalizeTask(task: TaskItem): TaskItem {
 
 function normalizeStreakSettings(settings: TaskStreakSettings | undefined): TaskStreakSettings | undefined {
   if (!settings) return undefined;
+  const legacyHardcore = Boolean(settings.hardcore);
   return {
-    hardcore: Boolean(settings.hardcore),
+    softMode: typeof settings.softMode === "boolean" ? settings.softMode : !legacyHardcore,
+    hardcore: legacyHardcore,
     initialLives: Math.max(0, Math.floor(Number(settings.initialLives) || 0)),
     livesEveryDays: Math.max(0, Math.floor(Number(settings.livesEveryDays) || 0))
   };

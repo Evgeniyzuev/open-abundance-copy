@@ -19,7 +19,7 @@
 - [x] Added completed/deleted archive screen.
 - [x] Added permanent delete from archive with confirmation.
 - [x] Added finite streak completion dialog with `Extend` / `Finish`.
-- [x] Added optional hardcore streak failure on missed planned days.
+- [x] Replaced the visible hardcore option with soft mode: missed planned days do not fail the streak and do not add progress.
 - [x] Added streak lives: missed days can be covered with heart completions, with earned lives after a configured number of done days.
 - [x] Added `Repeat` action for active and archived tasks, opening `New Task` prefilled from the selected task with today's start date.
 
