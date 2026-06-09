@@ -835,25 +835,37 @@ function CoreLevelProgress({
   const progress = threshold ? clamp((core.balance / threshold) * 100, 0, 100) : 100;
   const displayProgress = Math.round(progress);
   const nextLevel = threshold ? core.level + 1 : core.level;
+  const chargeClass = progress >= 80 ? " high-charge" : progress >= 40 ? " medium-charge" : "";
 
   return (
-    <section className="core-level-panel" aria-label={t("wallet.coreProgress.aria")}>
-      <div className="core-level-head">
-        <span>{t("app.common.level")} {core.level}</span>
-        <strong>{threshold ? `${formatAdaptiveMoney(core.balance, locale)} / ${formatAdaptiveMoney(threshold, locale)}` : t("wallet.coreProgress.max")}</strong>
+    <section className={`core-level-panel${chargeClass}`} aria-label={t("wallet.coreProgress.aria")}>
+      <div className="core-reactor" aria-hidden="true">
+        <span className="core-reactor-glow" />
+        <span className="core-reactor-ring one"><i /></span>
+        <span className="core-reactor-ring two"><i /></span>
+        <span className="core-reactor-ring three"><i /></span>
+        <span className="core-reactor-core" />
       </div>
-      <div
-        className="core-level-track"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={threshold ?? Math.max(1, core.balance)}
-        aria-valuenow={threshold ? Math.min(core.balance, threshold) : Math.max(1, core.balance)}
-      >
-        <div className="core-level-fill" style={{ width: `${displayProgress}%` }} />
-      </div>
-      <div className="core-level-meta">
-        <span>{displayProgress}%</span>
-        <span>{threshold ? `${t("app.common.level")} ${nextLevel}` : t("wallet.coreProgress.max")}</span>
+      <div className="core-level-content">
+        <div className="core-level-head">
+          <span>{t("app.common.level")} {core.level}</span>
+          <strong>{threshold ? `${formatAdaptiveMoney(core.balance, locale)} / ${formatAdaptiveMoney(threshold, locale)}` : t("wallet.coreProgress.max")}</strong>
+        </div>
+        <div
+          className="core-level-track"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={threshold ?? Math.max(1, core.balance)}
+          aria-valuenow={threshold ? Math.min(core.balance, threshold) : Math.max(1, core.balance)}
+        >
+          <div className="core-level-fill" style={{ width: `${displayProgress}%` }}>
+            <span className="core-level-spark" />
+          </div>
+        </div>
+        <div className="core-level-meta">
+          <span>{displayProgress}%</span>
+          <span>{threshold ? `${t("app.common.level")} ${nextLevel}` : t("wallet.coreProgress.max")}</span>
+        </div>
       </div>
     </section>
   );
